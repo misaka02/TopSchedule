@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp"
+    android:background="@color/surface">
+
+    <TextView
+        android:id="@+id/dialogCourseName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="课程详情"
+        android:textColor="@color/on_surface"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginVertical="12dp"
+        android:background="@color/outline" />
+
+    <TextView
+        android:id="@+id/dialogTime"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:text="⏰ 时间：周一 第1,2节 (08:00 - 09:35)"
+        android:textColor="@color/on_surface"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/dialogLocation"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:text="📍 地点：教学楼 101"
+        android:textColor="@color/on_surface"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/dialogTeacher"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:text="👨‍🏫 教师：教学团队"
+        android:textColor="@color/on_surface"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/dialogWeeks"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:text="📅 周次：1-16周"
+        android:textColor="@color/on_surface"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/dialogDepartment"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:text="🏛️ 院系：研究生院"
+        android:textColor="@color/on_surface"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/dialogPhone"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="12dp"
+        android:text="📞 电话：010-12345678"
+        android:textColor="@color/on_surface_variant"
+        android:textSize="13sp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/dialogBtnClose"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="关闭"
+        app:cornerRadius="12dp" />
+</LinearLayout>

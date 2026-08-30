@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="floating_schedule"
+        android:enabled="true"
+        android:icon="@drawable/ic_floating_shortcut"
+        android:shortcutShortLabel="@string/shortcut_short_label"
+        android:shortcutLongLabel="@string/shortcut_long_label">
+        <intent
+            android:action="com.topware.timetable.ACTION_SHOW_FLOATING_SCHEDULE"
+            android:targetPackage="com.topware.timetable"
+            android:targetClass="com.topware.timetable.ui.floating.FloatingScheduleActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+</shortcuts>

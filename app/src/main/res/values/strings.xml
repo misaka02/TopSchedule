@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">浮窗课表</string>
+    <string name="title_floating_schedule">悬浮课表</string>
+    <string name="today_schedule">今日课程</string>
+    <string name="week_schedule">本周课程</string>
+    <string name="current_week_format">第 %1$d 周</string>
+    <string name="no_courses_today">今日暂无课程安排，好好休息吧~</string>
+    <string name="shortcut_short_label">悬浮课表</string>
+    <string name="shortcut_long_label">弹出悬浮课表面板(点击空白消失)</string>
+</resources>

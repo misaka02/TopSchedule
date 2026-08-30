@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/background">
+
+    <!-- Top Action Bar with Address Bar & UA Switcher -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="8dp"
+        android:background="@color/surface"
+        android:elevation="2dp">
+
+        <ImageButton
+            android:id="@+id/btnWebBack"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_revert"
+            android:contentDescription="返回" />
+
+        <EditText
+            android:id="@+id/etUrlInput"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:layout_marginHorizontal="4dp"
+            android:background="@drawable/bg_round_tag"
+            android:hint="输入教务系统网址 https://..."
+            android:inputType="textUri"
+            android:imeOptions="actionGo"
+            android:paddingHorizontal="10dp"
+            android:singleLine="true"
+            android:textSize="12.5sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnGoUrl"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="wrap_content"
+            android:layout_height="38dp"
+            android:paddingHorizontal="10dp"
+            android:text="前往"
+            android:textSize="12.5sp" />
+
+        <!-- UA Switch Toggle Button (Desktop vs Mobile) -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnToggleUa"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="38dp"
+            android:layout_marginStart="4dp"
+            android:paddingHorizontal="8dp"
+            android:text="🖥️电脑版"
+            android:textSize="11.5sp" />
+
+        <!-- Bookmark / Default URL Star -->
+        <ImageButton
+            android:id="@+id/btnSaveBookmark"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:layout_marginStart="2dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/btn_star_big_off"
+            android:contentDescription="设为默认教务地址" />
+    </LinearLayout>
+
+    <ProgressBar
+        android:id="@+id/progressBar"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:indeterminate="false"
+        android:progressTint="@color/primary" />
+
+    <!-- Help Banner -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@color/primary_container"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="7dp">
+
+        <TextView
+            android:id="@+id/tvUrlTip"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="💡 默认已开启「🖥️电脑版」UA，便于完整加载教务系统表格。进入课表页后点击下方抓取即可！"
+            android:textColor="@color/on_primary_container"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <WebView
+            android:id="@+id/webView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </FrameLayout>
+
+    <!-- Bottom Action Bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="12dp"
+        android:background="@color/surface"
+        android:elevation="8dp"
+        android:gravity="center">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnExtractSchedule"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="⚡ 一键智能抓取并更新课表"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            app:cornerRadius="12dp"
+            app:backgroundTint="@color/primary" />
+    </LinearLayout>
+
+</LinearLayout>
