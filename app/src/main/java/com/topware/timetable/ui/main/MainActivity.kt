@@ -2,6 +2,7 @@ package com.topware.timetable.ui.main
 
 import android.app.AlertDialog
 import android.app.DatePickerDialog
+import android.app.Dialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -34,7 +35,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var repository: ScheduleRepository
-    private var currentWeek: Int = 1
+    private var actualCurrentWeek: Int = 1
     private var selectedWeek: Int = 1
 
     private val pickHtmlLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
@@ -60,26 +61,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun initViews() {
         val config = repository.getSemesterConfig()
-        currentWeek = TimeUtils.getCurrentWeek(config)
-        selectedWeek = currentWeek
+        actualCurrentWeek = TimeUtils.getCurrentWeek(config)
+        selectedWeek = actualCurrentWeek
 
-        binding.chipGroupWeeks.removeAllViews()
-        for (w in 1..config.totalWeeks) {
-            val chip = Chip(this).apply {
-                text = "第 $w 周"
-                isCheckable = true
-                id = w
-                if (w == currentWeek) {
-                    text = "第 $w 周 (本周)"
-                }
-                setOnClickListener {
-                    selectedWeek = w
-                    updateWeekView()
-                }
-            }
-            binding.chipGroupWeeks.addView(chip)
-        }
-        binding.chipGroupWeeks.check(selectedWeek)
+        refreshWeekChips(config.totalWeeks)
 
         binding.btnOpenFloating.setOnClickListener {
             startActivity(Intent(this, FloatingScheduleActivity::class.java))
@@ -94,9 +79,33 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun refreshWeekChips(totalWeeks: Int) {
+        binding.chipGroupWeeks.removeAllViews()
+        for (w in 1..totalWeeks) {
+            val chip = Chip(this).apply {
+                text = if (w == actualCurrentWeek) "第 $w 周 (本周)" else "第 $w 周"
+                isCheckable = true
+                isChecked = (w == selectedWeek)
+                setOnClickListener {
+                    selectedWeek = w
+                    updateChipsSelection()
+                    updateWeekView()
+                }
+            }
+            binding.chipGroupWeeks.addView(chip)
+        }
+    }
+
+    private fun updateChipsSelection() {
+        for (i in 0 until binding.chipGroupWeeks.childCount) {
+            val chip = binding.chipGroupWeeks.getChildAt(i) as? Chip
+            chip?.isChecked = (i + 1 == selectedWeek)
+        }
+    }
+
     private fun loadData() {
         val config = repository.getSemesterConfig()
-        currentWeek = TimeUtils.getCurrentWeek(config)
+        actualCurrentWeek = TimeUtils.getCurrentWeek(config)
         updateWeekView()
     }
 
@@ -107,7 +116,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showCourseDetail(course: Course) {
-        val dialog = android.app.Dialog(this)
+        val dialog = Dialog(this)
         val view = layoutInflater.inflate(R.layout.dialog_course_detail, null)
         dialog.setContentView(view)
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
@@ -115,7 +124,8 @@ class MainActivity : AppCompatActivity() {
         view.findViewById<TextView>(R.id.dialogCourseName).text = course.name
         view.findViewById<TextView>(R.id.dialogTime).text = "${course.dayName} ${course.getFormattedPeriodRange()} (${course.getFormattedTimeRange()})"
         view.findViewById<TextView>(R.id.dialogLocation).text = course.location.ifBlank { "待定" }
-                val curTeacher = course.getTeacherForWeek(selectedWeek)
+
+        val curTeacher = course.getTeacherForWeek(selectedWeek)
         view.findViewById<TextView>(R.id.dialogTeacher).text = "本周教师：$curTeacher"
 
         val allTeachersTv = view.findViewById<TextView>(R.id.dialogAllTeachers)
@@ -129,6 +139,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             allTeachersTv.text = "全周: ${course.teacher.ifBlank { "待定" }}"
         }
+
         view.findViewById<TextView>(R.id.dialogWeeks).text = course.weeksStr.ifBlank { "全周" }
         view.findViewById<TextView>(R.id.dialogDepartment).text = course.department.ifBlank { "教务处" }
         view.findViewById<TextView>(R.id.dialogPhone).text = course.phone.ifBlank { "暂无" }
@@ -144,7 +155,7 @@ class MainActivity : AppCompatActivity() {
         menu?.add(0, 2, 0, "设置默认教务网址")
         menu?.add(0, 3, 0, "设置开学日期")
         menu?.add(0, 4, 0, "恢复默认示例课表")
-        menu?.add(0, 5, 0, "使用指引与快捷方式")
+        menu?.add(0, 5, 0, "使用说明")
         return true
     }
 
@@ -192,14 +203,14 @@ class MainActivity : AppCompatActivity() {
                     repository.saveCourses(courses)
                     loadData()
                     AlertDialog.Builder(this@MainActivity)
-                        .setTitle("文件导入成功")
-                        .setMessage("已成功从本地 HTML 文件中解析并导入 ${courses.size} 门次课程。\n主课表与悬浮窗已全部同步更新。")
-                        .setPositiveButton("完成", null)
+                        .setTitle("导入成功")
+                        .setMessage("已成功解析并导入 ${courses.size} 门次课程。")
+                        .setPositiveButton("确定", null)
                         .show()
                 } else {
                     AlertDialog.Builder(this@MainActivity)
-                        .setTitle("解析未成功")
-                        .setMessage("未能从所选 HTML 文件中提取到有效课表数据。请确保选中的文件是教务系统【学生课表】导出的完整网页。")
+                        .setTitle("解析失败")
+                        .setMessage("未能提取到课表数据，请确保选中的是教务系统课表导出的完整 HTML 文件。")
                         .setPositiveButton("确定", null)
                         .show()
                 }
@@ -211,9 +222,9 @@ class MainActivity : AppCompatActivity() {
         val input = EditText(this)
         val saved = repository.getSavedJwUrl()
         input.setText(saved)
-        input.hint = "https://your-school-jw-system-url..."
+        input.hint = "https://..."
         AlertDialog.Builder(this)
-            .setTitle("设置默认教务系统登录网址")
+            .setTitle("设置默认教务系统网址")
             .setView(input)
             .setPositiveButton("保存并前往") { _, _ ->
                 val url = input.text.toString().trim()
@@ -248,16 +259,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun showHelpDialog() {
         AlertDialog.Builder(this)
-            .setTitle("使用指引")
+            .setTitle("使用说明")
             .setMessage("""
-                1. 本地 HTML 文件导入：
-                   点击右上角菜单 ->「导入本地 HTML 课表文件」，在手机文件管理器中选取保存好的课表网页文件即可极速导入。
+                1. 本地导入：
+                   右上角菜单 ->「导入本地 HTML 课表文件」，直接选取保存的课表网页。
 
-                2. 网页一键抓取：
-                   点击右下角「进入网页更新」，输入教务系统网址并登录。进入课表页面后点击底部「一键智能抓取」即可同步。
+                2. 网页抓取：
+                   右下角「进入网页更新」，在内置浏览器中登录教务系统，到达课表页面后点击底部「抓取课表」。
 
-                3. Panels / 快捷方式调用：
-                   在 Panels 侧边栏或其他手势应用中，添加快捷方式 (Shortcut) 并选择「悬浮课表」，即可随时随地在任何界面上方悬浮唤起课表，点击外部空白处或按返回键瞬间关闭。
+                3. Panels / 快捷方式：
+                   支持在 Panels 或桌面添加「悬浮课表」快捷方式，随时呼出完整周课表，点击空白处自动关闭。
             """.trimIndent())
             .setPositiveButton("确定", null)
             .show()
