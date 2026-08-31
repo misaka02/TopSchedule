@@ -3,6 +3,7 @@ package com.topware.timetable.ui.webview
 import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Bundle
 import android.view.inputmethod.EditorInfo
 import android.webkit.JavascriptInterface
@@ -12,8 +13,12 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.topware.timetable.R
+import com.topware.timetable.data.model.Course
 import com.topware.timetable.data.parser.TopsoftHtmlParser
 import com.topware.timetable.data.repository.ScheduleRepository
 import com.topware.timetable.databinding.ActivityWebScheduleBinding
@@ -24,6 +29,10 @@ class WebScheduleActivity : AppCompatActivity() {
     private lateinit var repository: ScheduleRepository
     private var isDesktopUa: Boolean = true
     private var defaultMobileUa: String = ""
+
+    private val selectHtmlLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let { importFromUri(it) }
+    }
 
     companion object {
         const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
@@ -50,6 +59,27 @@ class WebScheduleActivity : AppCompatActivity() {
         } else {
             updateBookmarkIcon(false)
             binding.etUrlInput.requestFocus()
+        }
+    }
+
+    private fun importFromUri(uri: Uri) {
+        try {
+            contentResolver.openInputStream(uri)?.use { stream ->
+                val html = stream.bufferedReader().readText()
+                val courses = TopsoftHtmlParser.parse(html)
+                if (courses.isNotEmpty()) {
+                    repository.saveCourses(courses)
+                    AlertDialog.Builder(this)
+                        .setTitle("本地课表导入成功")
+                        .setMessage("成功从本地网页解析到 " + courses.size + " 门次课程。\n主课表与悬浮窗已全部同步更新。")
+                        .setPositiveButton("查看") { _, _ -> finish() }
+                        .show()
+                } else {
+                    Toast.makeText(this, "未能从选中的文件中识别到课表表格", Toast.LENGTH_LONG).show()
+                }
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "读取文件失败：" + e.message, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -137,6 +167,11 @@ class WebScheduleActivity : AppCompatActivity() {
 
         binding.btnExtractSchedule.setOnClickListener {
             extractScheduleHtml()
+        }
+
+        binding.btnExtractSchedule.setOnLongClickListener {
+            selectHtmlLauncher.launch("*/*")
+            true
         }
     }
 
@@ -233,7 +268,6 @@ class WebScheduleActivity : AppCompatActivity() {
                         });
                     }
 
-                    // 居中铺满全屏自适应宽度（不强制 0.25 缩放）
                     var metas = document.getElementsByTagName('meta');
                     for (var i = 0; i < metas.length; i++) {
                         if (metas[i].name === 'viewport') {
@@ -327,36 +361,170 @@ class WebScheduleActivity : AppCompatActivity() {
         Toast.makeText(this, "正在深度递归抓取所有框架课表...", Toast.LENGTH_SHORT).show()
         val js = """
             (function() {
-                function collectHtml(win) {
-                    var str = '';
+                var collectedCourses = [];
+                var allHtml = '';
+
+                function inspectWindow(win) {
+                    if (!win) return;
                     try {
-                        if (win && win.document && win.document.documentElement) {
-                            str += win.document.documentElement.outerHTML + '
+                        var doc = win.document;
+                        if (!doc) return;
+                        allHtml += doc.documentElement.outerHTML + '
 ';
+
+                        // 查找包含课程文本的所有卡片元素
+                        var elements = doc.querySelectorAll('div, td');
+                        for (var i = 0; i < elements.length; i++) {
+                            var el = elements[i];
+                            var cls = el.className || '';
+                            if (typeof cls !== 'string') cls = '';
+                            var txt = el.innerText || '';
+
+                            var isCard = (cls.indexOf('course_card') !== -1) || 
+                                         (txt.indexOf('节次:') !== -1 && txt.indexOf('周次:') !== -1);
+
+                            if (isCard && txt.length > 5) {
+                                var td = el.tagName === 'TD' ? el : el.closest('td');
+                                var dayOfWeek = 1;
+                                var dayName = '周一';
+
+                                if (td) {
+                                    var field = td.getAttribute('field') || '';
+                                    if (field === 'Monday') { dayOfWeek = 1; dayName = '周一'; }
+                                    else if (field === 'Tuesday') { dayOfWeek = 2; dayName = '周二'; }
+                                    else if (field === 'Wednesday') { dayOfWeek = 3; dayName = '周三'; }
+                                    else if (field === 'Thursday') { dayOfWeek = 4; dayName = '周四'; }
+                                    else if (field === 'Friday') { dayOfWeek = 5; dayName = '周五'; }
+                                    else if (field === 'Saturday') { dayOfWeek = 6; dayName = '周六'; }
+                                    else if (field === 'Sunday') { dayOfWeek = 7; dayName = '周日'; }
+                                    else {
+                                        var idx = td.cellIndex;
+                                        if (idx !== undefined && idx >= 2 && idx <= 8) {
+                                            dayOfWeek = idx - 1;
+                                            var names = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+                                            dayName = names[dayOfWeek] || '周一';
+                                        }
+                                    }
+                                }
+
+                                var lines = txt.split('
+').map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
+                                var name = '';
+                                var teacher = '';
+                                var jieci = '1,2';
+                                var weeks = '';
+                                var location = '';
+                                var department = '';
+                                var phone = '';
+
+                                for (var l = 0; l < lines.length; l++) {
+                                    var line = lines[l];
+                                    if (line.indexOf('节次:') !== -1) {
+                                        jieci = line.replace('节次:', '').replace('节', '').trim();
+                                    } else if (line.indexOf('周次:') !== -1) {
+                                        weeks = line.replace('周次:', '').trim();
+                                    } else if (line.indexOf('地点:') !== -1) {
+                                        location = line.replace('地点:', '').trim();
+                                    } else if (line.indexOf('开课院系:') !== -1) {
+                                        department = line.replace('开课院系:', '').trim();
+                                    } else if (line.indexOf('电话:') !== -1) {
+                                        phone = line.replace('电话:', '').trim();
+                                    } else if (!name && line.indexOf(':') === -1 && line.indexOf('：') === -1) {
+                                        name = line;
+                                    } else if (!teacher && line.indexOf(':') === -1 && line.indexOf('：') === -1 && line !== name) {
+                                        teacher = line;
+                                    }
+                                }
+
+                                if (name && weeks && name !== '考生来源' && name !== '考试方式' && name !== '最后学历学习形式' && name !== '校外导师') {
+                                    collectedCourses.push({
+                                        name: name,
+                                        teacher: teacher,
+                                        dayOfWeek: dayOfWeek,
+                                        dayName: dayName,
+                                        jieci: jieci,
+                                        weeksStr: weeks,
+                                        location: location,
+                                        department: department,
+                                        phone: phone
+                                    });
+                                }
+                            }
                         }
                     } catch(e) {}
+
                     try {
-                        if (win && win.frames) {
-                            for (var i = 0; i < win.frames.length; i++) {
+                        if (win.frames) {
+                            for (var f = 0; f < win.frames.length; f++) {
                                 try {
-                                    str += collectHtml(win.frames[i]);
+                                    inspectWindow(win.frames[f]);
                                 } catch(e) {}
                             }
                         }
                     } catch(e) {}
-                    return str;
                 }
-                var allHtml = collectHtml(window);
-                ScheduleBridge.processHtml(allHtml);
+
+                inspectWindow(window);
+                ScheduleBridge.processResult(JSON.stringify(collectedCourses), allHtml);
             })();
         """.trimIndent()
 
         binding.webView.evaluateJavascript(js, null)
     }
 
-    fun onHtmlReceived(html: String) {
+    data class RawJsCourse(
+        val name: String = "",
+        val teacher: String = "",
+        val dayOfWeek: Int = 1,
+        val dayName: String = "周一",
+        val jieci: String = "1,2",
+        val weeksStr: String = "",
+        val location: String = "",
+        val department: String = "",
+        val phone: String = ""
+    )
+
+    fun onResultReceived(json: String, html: String) {
         runOnUiThread {
-            val courses = TopsoftHtmlParser.parse(html)
+            var courses: List<Course> = emptyList()
+
+            if (json.isNotBlank() && json != "[]") {
+                try {
+                    val gson = Gson()
+                    val type = object : TypeToken<List<RawJsCourse>>() {}.type
+                    val rawList: List<RawJsCourse> = gson.fromJson(json, type)
+                    courses = rawList.map { raw ->
+                        val (weeks, assignments) = TopsoftHtmlParser.parseWeeksAndTeacherAssignments(raw.weeksStr, raw.teacher)
+                        val periods = Regex("""\d+""").findAll(raw.jieci).map { it.value.toInt() }.toList()
+                        val startPeriod = periods.minOrNull() ?: 1
+                        val endPeriod = periods.maxOrNull() ?: startPeriod
+                        Course(
+                            name = raw.name,
+                            teacher = raw.teacher,
+                            dayOfWeek = raw.dayOfWeek,
+                            dayName = raw.dayName,
+                            jieci = raw.jieci,
+                            startPeriod = startPeriod,
+                            endPeriod = endPeriod,
+                            periodCount = endPeriod - startPeriod + 1,
+                            weeksStr = raw.weeksStr,
+                            weeks = weeks,
+                            teacherAssignments = assignments,
+                            location = raw.location,
+                            department = raw.department,
+                            phone = raw.phone,
+                            colorIndex = Math.abs(raw.name.hashCode())
+                        )
+                    }.distinctBy { "${it.name}_${it.dayOfWeek}_${it.startPeriod}_${it.weeksStr}_${it.location}" }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+
+            if (courses.isEmpty() && html.isNotBlank()) {
+                courses = TopsoftHtmlParser.parse(html)
+            }
+
             if (courses.isNotEmpty()) {
                 repository.saveCourses(courses)
                 val currentUrl = binding.webView.url
@@ -373,9 +541,12 @@ class WebScheduleActivity : AppCompatActivity() {
                     .show()
             } else {
                 AlertDialog.Builder(this)
-                    .setTitle("未提取到课程")
-                    .setMessage("已抓取页面内容（字符数：" + html.length + "），但未能识别到课表表格。\n请确保当前处于【学生课表】或【我的课表】排课页面。")
-                    .setPositiveButton("确定", null)
+                    .setTitle("未检测到课表")
+                    .setMessage("已抓取页面全部框架（共 " + html.length + " 字符），但未能识别到课表表格。\n\n建议：\n1. 请在教务系统中点击左侧菜单进入【我的课表】或【学生课表】页面；\n2. 长按【抓取课表】按钮可直接导入手机本地已保存的 HTML 课表网页。")
+                    .setPositiveButton("我知道了", null)
+                    .setNeutralButton("导入本地网页") { _, _ ->
+                        selectHtmlLauncher.launch("*/*")
+                    }
                     .show()
             }
         }
@@ -383,8 +554,8 @@ class WebScheduleActivity : AppCompatActivity() {
 
     class ScheduleJsBridge(private val activity: WebScheduleActivity) {
         @JavascriptInterface
-        fun processHtml(html: String) {
-            activity.onHtmlReceived(html)
+        fun processResult(json: String, html: String) {
+            activity.onResultReceived(json, html)
         }
     }
 }

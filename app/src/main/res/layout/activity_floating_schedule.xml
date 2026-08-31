@@ -11,21 +11,21 @@
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/cardFloating"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_marginHorizontal="28dp"
-        android:layout_marginVertical="72dp"
+        android:layout_height="wrap_content"
         android:layout_gravity="center"
+        android:layout_marginHorizontal="28dp"
+        android:layout_marginVertical="80dp"
         android:clickable="true"
         android:focusable="true"
         app:cardCornerRadius="24dp"
-        app:cardElevation="20dp"
+        app:cardElevation="24dp"
         app:strokeWidth="1dp"
         app:strokeColor="@color/outline"
         app:cardBackgroundColor="@color/surface">
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
             android:orientation="vertical"
             android:padding="16dp">
 
@@ -106,12 +106,11 @@
                     android:textSize="13sp" />
             </com.google.android.material.button.MaterialButtonToggleGroup>
 
-            <!-- 左右滑动的 ViewPager2 -->
+            <!-- 适度高度的 ViewPager2，保证上下留出宽阔的半透明黑色区域用于点击退出 -->
             <androidx.viewpager2.widget.ViewPager2
                 android:id="@+id/viewPagerFloating"
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1" />
+                android:layout_height="380dp" />
 
             <TextView
                 android:id="@+id/tvDismissHint"
@@ -119,7 +118,7 @@
                 android:layout_height="wrap_content"
                 android:gravity="center"
                 android:paddingTop="8dp"
-                android:paddingBottom="4dp"
+                android:paddingBottom="2dp"
                 android:text="左右滑动切换 · 点击空白处或返回键退出"
                 android:textColor="@color/on_surface_variant"
                 android:textSize="11sp" />
