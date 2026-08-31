@@ -8,14 +8,20 @@ import org.jsoup.nodes.Element
 
 object TopsoftHtmlParser {
 
-    private val DAY_FIELDS = listOf(
-        Triple("Monday", 1, "周一"),
-        Triple("Tuesday", 2, "周二"),
-        Triple("Wednesday", 3, "周三"),
-        Triple("Thursday", 4, "周四"),
-        Triple("Friday", 5, "周五"),
-        Triple("Saturday", 6, "周六"),
-        Triple("Sunday", 7, "周日")
+    private val DAY_FIELDS = mapOf(
+        "Monday" to Pair(1, "周一"),
+        "Tuesday" to Pair(2, "周二"),
+        "Wednesday" to Pair(3, "周三"),
+        "Thursday" to Pair(4, "周四"),
+        "Friday" to Pair(5, "周五"),
+        "Saturday" to Pair(6, "周六"),
+        "Sunday" to Pair(7, "周日")
+    )
+
+    private val BLACKLIST_NAMES = setOf(
+        "考生来源", "考试方式", "最后学历学习形式", "校外导师", "学号", "姓名", "性别",
+        "身份证号", "专业", "班级", "学院", "培养类别", "入学时间", "学籍状态", "导师",
+        "出生日期", "民族", "政治面貌", "毕业学校", "籍贯", "个人信息", "基本信息"
     )
 
     fun parse(html: String): List<Course> {
@@ -25,94 +31,146 @@ object TopsoftHtmlParser {
         try {
             val doc: Document = Jsoup.parse(html)
 
-            // 1. 寻找所有可能的课表表格
+            // 优先策略 1：直接定位所有 div.course_card 课程卡片（拓扑教务精准提取）
+            val cards = doc.select("div[class*=course_card]")
+            if (cards.isNotEmpty()) {
+                for (card in cards) {
+                    val name = card.selectFirst("span.course_name")?.text()?.trim()
+                        ?: card.selectFirst("span.course_title")?.text()?.trim()
+                        ?: ""
+                    if (name.isBlank() || BLACKLIST_NAMES.contains(name) || name.length <= 1) continue
+
+                    // 确定星期几
+                    val td = card.parents().firstOrNull { it.tagName() == "td" }
+                    val field = td?.attr("field") ?: ""
+                    val (dayOfWeek, dayName) = DAY_FIELDS[field] ?: Pair(1, "周一")
+
+                    // 确定默认节次
+                    val tr = card.parents().firstOrNull { it.tagName() == "tr" }
+                    val jieciTd = tr?.selectFirst("td[field=JieCi]")
+                    val rowJieci = jieciTd?.text()?.trim() ?: "1,2"
+
+                    val teacher = card.selectFirst("span.course_tea_name")?.text()?.trim() ?: ""
+                    val dtls = card.select("span.course_dtl").map { it.text().trim() }
+
+                    var jieciStr = rowJieci
+                    var weeksStr = ""
+                    var location = ""
+                    var department = ""
+                    var phone = ""
+
+                    for (d in dtls) {
+                        when {
+                            d.startsWith("节次:") -> jieciStr = d.removePrefix("节次:").replace("节", "").trim()
+                            d.startsWith("周次:") -> weeksStr = d.removePrefix("周次:").trim()
+                            d.startsWith("地点:") -> location = d.removePrefix("地点:").trim()
+                            d.startsWith("开课院系:") -> department = d.removePrefix("开课院系:").trim()
+                            d.startsWith("电话:") -> phone = d.removePrefix("电话:").trim()
+                        }
+                    }
+
+                    val (weeks, assignments) = parseWeeksAndTeacherAssignments(weeksStr, teacher)
+                    val periods = Regex("""\d+""").findAll(jieciStr).map { it.value.toInt() }.toList()
+                    val startPeriod = periods.minOrNull() ?: 1
+                    val endPeriod = periods.maxOrNull() ?: startPeriod
+
+                    val course = Course(
+                        name = name,
+                        teacher = teacher,
+                        dayOfWeek = dayOfWeek,
+                        dayName = dayName,
+                        jieci = jieciStr,
+                        startPeriod = startPeriod,
+                        endPeriod = endPeriod,
+                        periodCount = endPeriod - startPeriod + 1,
+                        weeksStr = weeksStr,
+                        weeks = weeks,
+                        teacherAssignments = assignments,
+                        location = location,
+                        department = department,
+                        phone = phone,
+                        colorIndex = Math.abs(name.hashCode())
+                    )
+                    courses.add(course)
+                }
+
+                if (courses.isNotEmpty()) {
+                    return courses.distinctBy { "${it.name}_${it.dayOfWeek}_${it.startPeriod}_${it.weeksStr}_${it.location}" }
+                }
+            }
+
+            // 备用策略 2：通过星期表头匹配课表（排除个人信息等无关表格）
             val tables = doc.select("table")
             for (table in tables) {
-                val parsed = parseTable(table)
-                if (parsed.isNotEmpty()) {
-                    courses.addAll(parsed)
+                val headerText = table.text()
+                var matchedDayCount = 0
+                for (day in listOf("星期一", "星期二", "星期三", "星期四", "星期五")) {
+                    if (headerText.contains(day)) matchedDayCount++
+                }
+                if (matchedDayCount < 3) continue
+
+                val rows = table.select("tr")
+                val dayColMap = mutableMapOf<Int, Pair<Int, String>>()
+                var headerRow: Element? = null
+
+                for (tr in rows) {
+                    val cells = tr.select("th, td")
+                    var count = 0
+                    for ((idx, cell) in cells.withIndex()) {
+                        val t = cell.text().trim()
+                        val dayInfo = matchDayName(t)
+                        if (dayInfo != null) {
+                            dayColMap[idx] = dayInfo
+                            count++
+                        }
+                    }
+                    if (count >= 3) {
+                        headerRow = tr
+                        break
+                    }
+                }
+
+                if (headerRow != null && dayColMap.isNotEmpty()) {
+                    for (tr in rows) {
+                        if (tr == headerRow) continue
+                        val cells = tr.select("th, td")
+                        if (cells.isEmpty()) continue
+
+                        val firstText = cells.first()?.text()?.trim() ?: ""
+                        val rowJieci = extractJieciFromText(firstText)
+
+                        for ((colIdx, dayInfo) in dayColMap) {
+                            if (colIdx < cells.size) {
+                                val td = cells[colIdx]
+                                val text = td.text().trim()
+                                if (text.isNotBlank() && (text.contains("周") || text.contains("节"))) {
+                                    parseCourseFromText(text, dayInfo.first, dayInfo.second, rowJieci)?.let {
+                                        if (!BLACKLIST_NAMES.contains(it.name)) {
+                                            courses.add(it)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         } catch (e: Exception) {
             e.printStackTrace()
         }
 
-        // 去重合并
         return courses.distinctBy { "${it.name}_${it.dayOfWeek}_${it.startPeriod}_${it.weeksStr}_${it.location}" }
-    }
-
-    private fun parseTable(table: Element): List<Course> {
-        val list = mutableListOf<Course>()
-
-        // 策略 A: 基于 Topsoft 经典 field 属性解析
-        if (table.select("th[name=Monday], td[field=Monday]").isNotEmpty() || table.select("td[field=JieCi]").isNotEmpty()) {
-            for (tr in table.select("tr")) {
-                val jieciTd = tr.selectFirst("td[field=JieCi]")
-                val rowJieci = jieciTd?.text()?.trim() ?: ""
-
-                for ((fieldName, dayOfWeek, dayName) in DAY_FIELDS) {
-                    val td = tr.selectFirst("td[field=$fieldName]") ?: continue
-                    parseTdCell(td, dayOfWeek, dayName, rowJieci, list)
-                }
-            }
-            if (list.isNotEmpty()) return list
-        }
-
-        // 策略 B: 通用星期表头列索引映射解析
-        val rows = table.select("tr")
-        if (rows.isEmpty()) return emptyList()
-
-        var headerRow: Element? = null
-        val dayColMap = mutableMapOf<Int, Pair<Int, String>>() // colIndex -> (dayOfWeek, dayName)
-
-        for (tr in rows) {
-            val cells = tr.select("th, td")
-            var matchedDays = 0
-            for ((idx, cell) in cells.withIndex()) {
-                val t = cell.text().trim()
-                val dayInfo = matchDayName(t)
-                if (dayInfo != null) {
-                    dayColMap[idx] = dayInfo
-                    matchedDays++
-                }
-            }
-            if (matchedDays >= 3) {
-                headerRow = tr
-                break
-            }
-        }
-
-        if (headerRow != null && dayColMap.isNotEmpty()) {
-            for (tr in rows) {
-                if (tr == headerRow) continue
-                val cells = tr.select("th, td")
-                if (cells.isEmpty()) continue
-
-                // 提取首列节次
-                val firstText = cells.first()?.text()?.trim() ?: ""
-                val rowJieci = extractJieciFromText(firstText)
-
-                for ((colIdx, dayInfo) in dayColMap) {
-                    if (colIdx < cells.size) {
-                        val td = cells[colIdx]
-                        parseTdCell(td, dayInfo.first, dayInfo.second, rowJieci, list)
-                    }
-                }
-            }
-        }
-
-        return list
     }
 
     private fun matchDayName(text: String): Pair<Int, String>? {
         return when {
-            text.contains("一") -> Pair(1, "周一")
-            text.contains("二") -> Pair(2, "周二")
-            text.contains("三") -> Pair(3, "周三")
-            text.contains("四") -> Pair(4, "周四")
-            text.contains("五") -> Pair(5, "周五")
-            text.contains("六") -> Pair(6, "周六")
-            text.contains("日") || text.contains("天") || text.contains("七") -> Pair(7, "周日")
+            text.contains("星期一") || text == "周一" || text == "一" -> Pair(1, "周一")
+            text.contains("星期二") || text == "周二" || text == "二" -> Pair(2, "周二")
+            text.contains("星期三") || text == "周三" || text == "三" -> Pair(3, "周三")
+            text.contains("星期四") || text == "周四" || text == "四" -> Pair(4, "周四")
+            text.contains("星期五") || text == "周五" || text == "五" -> Pair(5, "周五")
+            text.contains("星期六") || text == "周六" || text == "六" -> Pair(6, "周六")
+            text.contains("星期日") || text.contains("星期天") || text == "周日" || text == "日" -> Pair(7, "周日")
             else -> null
         }
     }
@@ -120,81 +178,6 @@ object TopsoftHtmlParser {
     private fun extractJieciFromText(text: String): String {
         val matches = Regex("""\d+""").findAll(text).map { it.value }.toList()
         return if (matches.isNotEmpty()) matches.joinToString(",") else "1,2"
-    }
-
-    private fun parseTdCell(
-        td: Element,
-        dayOfWeek: Int,
-        dayName: String,
-        rowJieci: String,
-        outList: MutableList<Course>
-    ) {
-        val cards = td.select("div[class*=course_card], div[class*=card], div[class*=kb_item]")
-        if (cards.isEmpty()) {
-            val text = td.text().trim()
-            if (text.isNotBlank() && (text.contains("周") || text.contains("节") || text.length >= 4)) {
-                parseCourseFromText(text, dayOfWeek, dayName, rowJieci)?.let {
-                    outList.add(it)
-                }
-            }
-            return
-        }
-
-        for (card in cards) {
-            val name = card.selectFirst("span.course_name")?.text()?.trim()
-                ?: card.selectFirst("span.course_title")?.text()?.trim()
-                ?: card.selectFirst(".title")?.text()?.trim()
-                ?: ""
-            if (name.isBlank()) continue
-
-            val teacher = card.selectFirst("span.course_tea_name")?.text()?.trim()
-                ?: card.selectFirst(".teacher")?.text()?.trim()
-                ?: ""
-
-            val dtls = card.select("span.course_dtl, .dtl, div, p").map { it.text().trim() }
-
-            var jieciStr = rowJieci
-            var weeksStr = ""
-            var location = ""
-            var department = ""
-            var phone = ""
-
-            for (d in dtls) {
-                when {
-                    d.startsWith("节次:") -> jieciStr = d.removePrefix("节次:").replace("节", "").trim()
-                    d.startsWith("周次:") -> weeksStr = d.removePrefix("周次:").trim()
-                    d.startsWith("地点:") -> location = d.removePrefix("地点:").trim()
-                    d.startsWith("开课院系:") -> department = d.removePrefix("开课院系:").trim()
-                    d.startsWith("电话:") -> phone = d.removePrefix("电话:").trim()
-                    d.contains("周") && weeksStr.isEmpty() -> weeksStr = d.replace("周次:", "").trim()
-                    (d.contains("楼") || d.contains("#") || d.contains("馆") || d.contains("室")) && location.isEmpty() -> location = d.replace("地点:", "").trim()
-                }
-            }
-
-            val (weeks, assignments) = parseWeeksAndTeacherAssignments(weeksStr, teacher)
-            val periods = Regex("""\d+""").findAll(jieciStr).map { it.value.toInt() }.toList()
-            val startPeriod = periods.minOrNull() ?: 1
-            val endPeriod = periods.maxOrNull() ?: startPeriod
-
-            val course = Course(
-                name = name,
-                teacher = teacher,
-                dayOfWeek = dayOfWeek,
-                dayName = dayName,
-                jieci = jieciStr,
-                startPeriod = startPeriod,
-                endPeriod = endPeriod,
-                periodCount = endPeriod - startPeriod + 1,
-                weeksStr = weeksStr,
-                weeks = weeks,
-                teacherAssignments = assignments,
-                location = location,
-                department = department,
-                phone = phone,
-                colorIndex = Math.abs(name.hashCode())
-            )
-            outList.add(course)
-        }
     }
 
     fun parseWeeksAndTeacherAssignments(
@@ -267,6 +250,8 @@ object TopsoftHtmlParser {
         val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
         if (lines.isEmpty()) return null
         val name = lines[0]
+        if (BLACKLIST_NAMES.contains(name) || name.length <= 1) return null
+
         val teacher = if (lines.size > 1) lines[1] else ""
         var location = ""
         var weeksStr = ""

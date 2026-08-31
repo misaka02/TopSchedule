@@ -27,7 +27,7 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.widgetDate, "第 $currentWeek 周 · $dayName")
 
             if (todayCourses.isEmpty()) {
-                views.setTextViewText(R.id.widgetCourseContent, "今日无课，尽情放松 ☕")
+                views.setTextViewText(R.id.widgetCourseContent, "今日无课程安排")
             } else {
                 val sb = StringBuilder()
                 for ((idx, c) in todayCourses.withIndex()) {
