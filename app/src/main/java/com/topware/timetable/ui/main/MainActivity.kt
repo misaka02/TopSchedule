@@ -1,20 +1,17 @@
 package com.topware.timetable.ui.main
 
 import android.app.AlertDialog
-import android.app.DatePickerDialog
-import android.app.Dialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
-import android.widget.EditText
-import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.lifecycleScope
-import com.google.android.material.button.MaterialButton
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 import com.topware.timetable.R
 import com.topware.timetable.data.model.Course
 import com.topware.timetable.data.parser.TopsoftHtmlParser
@@ -23,22 +20,17 @@ import com.topware.timetable.databinding.ActivityMainBinding
 import com.topware.timetable.ui.floating.FloatingScheduleActivity
 import com.topware.timetable.ui.webview.WebScheduleActivity
 import com.topware.timetable.util.TimeUtils
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.util.Calendar
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var repository: ScheduleRepository
-    private var actualCurrentWeek: Int = 1
-    private var selectedWeek: Int = 1
 
-    private val pickHtmlLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        uri?.let { importHtmlFromUri(it) }
+    private var selectedWeek: Int = 1
+    private var currentActualWeek: Int = 1
+
+    private val selectHtmlLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let { importFromUri(it) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,254 +38,184 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        setSupportActionBar(binding.toolbar)
         repository = ScheduleRepository.getInstance(this)
+        setSupportActionBar(binding.toolbar)
 
-        initViews()
-        loadData()
+        initTimeData()
+        setupListeners()
+        loadScheduleForWeek(selectedWeek)
     }
 
     override fun onResume() {
         super.onResume()
-        loadData()
+        loadScheduleForWeek(selectedWeek)
     }
 
-    private fun initViews() {
-        val config = repository.getSemesterConfig()
-        actualCurrentWeek = TimeUtils.getCurrentWeek(config)
-        selectedWeek = actualCurrentWeek
+    private fun importFromUri(uri: Uri) {
+        try {
+            contentResolver.openInputStream(uri)?.use { stream ->
+                val html = stream.bufferedReader().readText()
+                val courses = TopsoftHtmlParser.parse(html)
+                if (courses.isNotEmpty()) {
+                    repository.saveCourses(courses)
+                    loadScheduleForWeek(selectedWeek)
+                    AlertDialog.Builder(this)
+                        .setTitle("本地课表导入成功")
+                        .setMessage("成功解析并导入 ${courses.size} 门次课程。\n主界面与悬浮窗均已更新。")
+                        .setPositiveButton("确定", null)
+                        .show()
+                } else {
+                    Toast.makeText(this, "未能从选中的文件中解析到课表数据", Toast.LENGTH_LONG).show()
+                }
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "读取文件失败：${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
 
-        updateWeekTitle()
+    private fun requestPinShortcut() {
+        if (ShortcutManagerCompat.isRequestPinShortcutSupported(this)) {
+            val shortcutIntent = Intent(this, FloatingScheduleActivity::class.java).apply {
+                action = Intent.ACTION_VIEW
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val pinShortcutInfo = ShortcutInfoCompat.Builder(this, "floating_schedule_pinned")
+                .setIcon(IconCompat.createWithResource(this, R.mipmap.ic_launcher))
+                .setShortLabel("悬浮课表")
+                .setLongLabel("呼出今日与周课表")
+                .setIntent(shortcutIntent)
+                .build()
+
+            ShortcutManagerCompat.requestPinShortcut(this, pinShortcutInfo, null)
+            Toast.makeText(this, "已发起添加快捷方式请求，请在弹窗中允许", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "当前系统不支持自动添加，请在 Panels 中选择【快捷方式】->【悬浮课表】", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun initTimeData() {
+        val config = repository.getSemesterConfig()
+        currentActualWeek = TimeUtils.getCurrentWeek(config)
+        selectedWeek = currentActualWeek
+        updateWeekTitle(selectedWeek)
+    }
+
+    private fun setupListeners() {
+        binding.btnOpenFloating.setOnClickListener {
+            val intent = Intent(this, FloatingScheduleActivity::class.java)
+            startActivity(intent)
+        }
 
         binding.btnMainPrevWeek.setOnClickListener {
             if (selectedWeek > 1) {
                 selectedWeek--
-                updateWeekTitle()
-                updateWeekView()
+                updateWeekSelection(selectedWeek)
             }
         }
 
         binding.btnMainNextWeek.setOnClickListener {
-            val total = repository.getSemesterConfig().totalWeeks
-            if (selectedWeek < total) {
+            val config = repository.getSemesterConfig()
+            if (selectedWeek < config.totalWeeks) {
                 selectedWeek++
-                updateWeekTitle()
-                updateWeekView()
+                updateWeekSelection(selectedWeek)
             }
         }
 
         binding.tvMainWeekTitle.setOnClickListener {
-            showSelectWeekDialog()
-        }
-
-        binding.btnOpenFloating.setOnClickListener {
-            startActivity(Intent(this, FloatingScheduleActivity::class.java))
+            showWeekSelectDialog()
         }
 
         binding.fabSync.setOnClickListener {
-            startActivity(Intent(this, WebScheduleActivity::class.java))
+            val intent = Intent(this, WebScheduleActivity::class.java)
+            startActivity(intent)
+        }
+
+        binding.fabSync.setOnLongClickListener {
+            selectHtmlLauncher.launch("*/*")
+            true
         }
 
         binding.timetableView.setOnCourseClickListener { course ->
-            showCourseDetail(course)
+            showCourseDetailDialog(course)
         }
     }
 
-    private fun updateWeekTitle() {
-        val weekLabel = if (selectedWeek == actualCurrentWeek) {
-            "第 $selectedWeek 周 (本周) ▼"
-        } else {
-            "第 $selectedWeek 周 ▼"
-        }
-        binding.tvMainWeekTitle.text = weekLabel
-    }
+    private fun showWeekSelectDialog() {
+        val config = repository.getSemesterConfig()
+        val items = (1..config.totalWeeks).map { w ->
+            if (w == currentActualWeek) "第 $w 周 (本周)" else "第 $w 周"
+        }.toTypedArray()
 
-    private fun showSelectWeekDialog() {
-        val total = repository.getSemesterConfig().totalWeeks
-        val items = Array(total) { i ->
-            val w = i + 1
-            if (w == actualCurrentWeek) "第 $w 周 (本周)" else "第 $w 周"
-        }
         AlertDialog.Builder(this)
-            .setTitle("跳转周次")
+            .setTitle("选择周次")
             .setSingleChoiceItems(items, selectedWeek - 1) { dialog, which ->
                 selectedWeek = which + 1
-                updateWeekTitle()
-                updateWeekView()
+                updateWeekSelection(selectedWeek)
                 dialog.dismiss()
             }
-            .setNegativeButton("取消", null)
             .show()
     }
 
-    private fun loadData() {
-        val config = repository.getSemesterConfig()
-        actualCurrentWeek = TimeUtils.getCurrentWeek(config)
-        updateWeekTitle()
-        updateWeekView()
+    private fun updateWeekSelection(week: Int) {
+        updateWeekTitle(week)
+        loadScheduleForWeek(week)
     }
 
-    private fun updateWeekView() {
-        val courses = repository.getCoursesForWeek(selectedWeek)
-        binding.timetableView.setCourses(courses, selectedWeek)
-    }
-
-    private fun showCourseDetail(course: Course) {
-        val dialog = Dialog(this)
-        val view = layoutInflater.inflate(R.layout.dialog_course_detail, null)
-        dialog.setContentView(view)
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-
-        view.findViewById<TextView>(R.id.dialogCourseName).text = course.name
-        view.findViewById<TextView>(R.id.dialogTime).text = "${course.dayName} ${course.getFormattedPeriodRange()} (${course.getFormattedTimeRange()})"
-        view.findViewById<TextView>(R.id.dialogLocation).text = course.location.ifBlank { "待定" }
-
-        val curTeacher = course.getTeacherForWeek(selectedWeek)
-        view.findViewById<TextView>(R.id.dialogTeacher).text = "本周教师：$curTeacher"
-
-        val allTeachersTv = view.findViewById<TextView>(R.id.dialogAllTeachers)
-        if (course.teacherAssignments.isNotEmpty()) {
-            val sb = StringBuilder()
-            for (item in course.teacherAssignments) {
-                val weekRange = if (item.startWeek == item.endWeek) "第 ${item.startWeek} 周" else "第 ${item.startWeek}-${item.endWeek} 周"
-                sb.append("$weekRange: ${item.teacherName}\n")
-            }
-            allTeachersTv.text = sb.toString().trimEnd()
+    private fun updateWeekTitle(week: Int) {
+        val weekText = if (week == currentActualWeek) {
+            "第 $week 周 (本周) ▼"
         } else {
-            allTeachersTv.text = "全周: ${course.teacher.ifBlank { "待定" }}"
+            "第 $week 周 ▼"
         }
+        binding.tvMainWeekTitle.text = weekText
+    }
 
-        view.findViewById<TextView>(R.id.dialogWeeks).text = course.weeksStr.ifBlank { "全周" }
-        view.findViewById<TextView>(R.id.dialogDepartment).text = course.department.ifBlank { "教务处" }
-        view.findViewById<TextView>(R.id.dialogPhone).text = course.phone.ifBlank { "暂无" }
+    private fun loadScheduleForWeek(week: Int) {
+        val weekCourses = repository.getCoursesForWeek(week)
+        binding.timetableView.setCourses(weekCourses, week)
+    }
 
-        view.findViewById<MaterialButton>(R.id.dialogBtnClose).setOnClickListener {
-            dialog.dismiss()
-        }
-        dialog.show()
+    private fun showCourseDetailDialog(course: Course) {
+        val builder = AlertDialog.Builder(this)
+        builder.setTitle(course.name)
+        val currentWeek = selectedWeek
+        val teacherForThisWeek = course.getTeacherForWeek(currentWeek)
+
+        val sb = StringBuilder()
+        sb.append("时间：${course.dayName} 第 ${course.jieci} 节\n")
+        sb.append("教室：${course.location.ifBlank { "未指定" }}\n")
+        sb.append("教师：${teacherForThisWeek.ifBlank { course.teacher.ifBlank { "待定" } }}\n")
+        sb.append("周次：${course.weeksStr.ifBlank { "${course.weeks.firstOrNull() ?: 1}-${course.weeks.lastOrNull() ?: 16}周" }}\n")
+        if (course.department.isNotBlank()) sb.append("开课院系：${course.department}\n")
+        if (course.phone.isNotBlank()) sb.append("联系电话：${course.phone}\n")
+
+        builder.setMessage(sb.toString())
+        builder.setPositiveButton("确定", null)
+        builder.show()
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
-        menu?.add(0, 1, 0, "导入本地 HTML 课表文件")
-        menu?.add(0, 2, 0, "设置默认教务网址")
-        menu?.add(0, 3, 0, "设置开学日期")
-        menu?.add(0, 4, 0, "恢复默认示例课表")
-        menu?.add(0, 5, 0, "使用说明")
+        menu?.add(0, 1, 0, "添加侧边栏/桌面快捷方式")
+        menu?.add(0, 2, 1, "导入本地 HTML 课表")
+        menu?.add(0, 3, 2, "网络同步课表")
         return true
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            1 -> pickHtmlLauncher.launch("text/html")
-            2 -> showSetJwUrlDialog()
-            3 -> showSemesterSettingDialog()
-            4 -> {
-                repository.resetToPresets()
-                loadData()
-                Toast.makeText(this, "已重置为通用示例课表", Toast.LENGTH_SHORT).show()
+        return when (item.itemId) {
+            1 -> {
+                requestPinShortcut()
+                true
             }
-            5 -> showHelpDialog()
-        }
-        return super.onOptionsItemSelected(item)
-    }
-
-    private fun importHtmlFromUri(uri: Uri) {
-        Toast.makeText(this, "正在读取并解析文件...", Toast.LENGTH_SHORT).show()
-        lifecycleScope.launch(Dispatchers.IO) {
-            var content = ""
-            try {
-                content = contentResolver.openInputStream(uri)?.use { stream ->
-                    BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).readText()
-                } ?: ""
-            } catch (e: Exception) {
-                e.printStackTrace()
+            2 -> {
+                selectHtmlLauncher.launch("*/*")
+                true
             }
-
-            var courses = TopsoftHtmlParser.parse(content)
-            if (courses.isEmpty()) {
-                try {
-                    content = contentResolver.openInputStream(uri)?.use { stream ->
-                        BufferedReader(InputStreamReader(stream, java.nio.charset.Charset.forName("GBK"))).readText()
-                    } ?: ""
-                    courses = TopsoftHtmlParser.parse(content)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-
-            withContext(Dispatchers.Main) {
-                if (courses.isNotEmpty()) {
-                    repository.saveCourses(courses)
-                    loadData()
-                    AlertDialog.Builder(this@MainActivity)
-                        .setTitle("导入成功")
-                        .setMessage("已成功解析并导入 ${courses.size} 门次课程。")
-                        .setPositiveButton("确定", null)
-                        .show()
-                } else {
-                    AlertDialog.Builder(this@MainActivity)
-                        .setTitle("解析失败")
-                        .setMessage("未能提取到课表数据，请确保选中的是教务系统课表导出的完整 HTML 文件。")
-                        .setPositiveButton("确定", null)
-                        .show()
-                }
-            }
-        }
-    }
-
-    private fun showSetJwUrlDialog() {
-        val input = EditText(this)
-        val saved = repository.getSavedJwUrl()
-        input.setText(saved)
-        input.hint = "https://..."
-        AlertDialog.Builder(this)
-            .setTitle("设置默认教务系统网址")
-            .setView(input)
-            .setPositiveButton("保存并前往") { _, _ ->
-                val url = input.text.toString().trim()
-                repository.saveJwUrl(url)
+            3 -> {
                 startActivity(Intent(this, WebScheduleActivity::class.java))
+                true
             }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-
-    private fun showSemesterSettingDialog() {
-        val config = repository.getSemesterConfig()
-        val cal = Calendar.getInstance()
-        cal.timeInMillis = config.startDateMillis
-
-        DatePickerDialog(
-            this,
-            { _, year, month, dayOfMonth ->
-                val newCal = Calendar.getInstance()
-                newCal.set(year, month, dayOfMonth, 0, 0, 0)
-                val newConfig = config.copy(startDateMillis = newCal.timeInMillis)
-                repository.saveSemesterConfig(newConfig)
-                initViews()
-                loadData()
-                Toast.makeText(this, "开学日期已更新", Toast.LENGTH_SHORT).show()
-            },
-            cal.get(Calendar.YEAR),
-            cal.get(Calendar.MONTH),
-            cal.get(Calendar.DAY_OF_MONTH)
-        ).show()
-    }
-
-    private fun showHelpDialog() {
-        AlertDialog.Builder(this)
-            .setTitle("使用说明")
-            .setMessage("""
-                1. 本地导入：
-                   右上角菜单 ->「导入本地 HTML 课表文件」，直接选取保存的课表网页。
-
-                2. 网页抓取：
-                   右下角「网页同步」，在内置浏览器中登录教务系统，到达课表页面后点击底部「抓取课表」。
-
-                3. Panels / 快捷方式：
-                   支持在 Panels 或桌面添加「悬浮课表」快捷方式，随时呼出完整周课表，点击空白处自动关闭。
-            """.trimIndent())
-            .setPositiveButton("确定", null)
-            .show()
+            else -> super.onOptionsItemSelected(item)
+        }
     }
 }

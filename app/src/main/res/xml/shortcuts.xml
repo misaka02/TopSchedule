@@ -10,6 +10,6 @@
             android:action="android.intent.action.VIEW"
             android:targetPackage="com.topware.timetable"
             android:targetClass="com.topware.timetable.ui.floating.FloatingScheduleActivity" />
-        <categories android:name="android.shortcut.conversation" />
+        <categories android:name="android.intent.category.DEFAULT" />
     </shortcut>
 </shortcuts>

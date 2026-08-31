@@ -34,7 +34,19 @@
                 android:resource="@xml/shortcuts" />
         </activity>
 
-        <!-- 悬浮课表面板 Activity (Panels / 快捷方式直达目标) -->
+        <!-- Panels / 桌面快捷方式创建入口 -->
+        <activity
+            android:name=".ui.shortcut.CreateShortcutActivity"
+            android:exported="true"
+            android:label="悬浮课表"
+            android:icon="@mipmap/ic_launcher">
+            <intent-filter>
+                <action android:name="android.intent.action.CREATE_SHORTCUT" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- 悬浮课表面板 Activity -->
         <activity
             android:name=".ui.floating.FloatingScheduleActivity"
             android:theme="@style/Theme.TopSchedule.Floating"
