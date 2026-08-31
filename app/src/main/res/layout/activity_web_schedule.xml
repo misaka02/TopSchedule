@@ -6,70 +6,7 @@
     android:orientation="vertical"
     android:background="@color/background">
 
-    <!-- Top Action Bar with Address Bar & UA Switcher -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:padding="8dp"
-        android:background="@color/surface"
-        android:elevation="2dp">
-
-        <ImageButton
-            android:id="@+id/btnWebBack"
-            android:layout_width="38dp"
-            android:layout_height="38dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/ic_arrow_back"
-            app:tint="@color/on_surface"
-            android:contentDescription="返回" />
-
-        <EditText
-            android:id="@+id/etUrlInput"
-            android:layout_width="0dp"
-            android:layout_height="40dp"
-            android:layout_weight="1"
-            android:layout_marginHorizontal="6dp"
-            android:background="@drawable/bg_round_tag"
-            android:hint="输入教务系统登录网址"
-            android:inputType="textUri"
-            android:imeOptions="actionGo"
-            android:paddingHorizontal="10dp"
-            android:singleLine="true"
-            android:textSize="13sp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnGoUrl"
-            style="@style/Widget.Material3.Button.TonalButton"
-            android:layout_width="wrap_content"
-            android:layout_height="38dp"
-            android:paddingHorizontal="12dp"
-            android:text="前往"
-            android:textSize="13sp" />
-
-        <!-- UA Switch Toggle Button (Desktop vs Mobile) -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnToggleUa"
-            style="@style/Widget.Material3.Button.OutlinedButton"
-            android:layout_width="wrap_content"
-            android:layout_height="38dp"
-            android:layout_marginStart="4dp"
-            android:paddingHorizontal="10dp"
-            android:text="电脑版"
-            android:textSize="12sp" />
-
-        <!-- Bookmark Star Button -->
-        <ImageButton
-            android:id="@+id/btnSaveBookmark"
-            android:layout_width="38dp"
-            android:layout_height="38dp"
-            android:layout_marginStart="2dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/ic_star_outline"
-            android:contentDescription="设为默认教务地址" />
-    </LinearLayout>
-
+    <!-- 顶部加载进度条 -->
     <ProgressBar
         android:id="@+id/progressBar"
         style="?android:attr/progressBarStyleHorizontal"
@@ -78,26 +15,7 @@
         android:indeterminate="false"
         android:progressTint="@color/primary" />
 
-    <!-- Hint Banner -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:background="@color/primary_container"
-        android:paddingHorizontal="14dp"
-        android:paddingVertical="7dp">
-
-        <TextView
-            android:id="@+id/tvUrlTip"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="提示：默认已开启电脑版 UA 以完整渲染表格。进入课表页后点击下方抓取即可。"
-            android:textColor="@color/on_primary_container"
-            android:textSize="11.5sp" />
-    </LinearLayout>
-
+    <!-- 网页展示区域（全屏展开） -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -109,24 +27,132 @@
             android:layout_height="match_parent" />
     </FrameLayout>
 
-    <!-- Bottom Action Bar -->
+    <!-- 下置现代化工具栏区域 -->
     <LinearLayout
+        android:id="@+id/bottomToolContainer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="12dp"
+        android:orientation="vertical"
         android:background="@color/surface"
-        android:elevation="8dp"
-        android:gravity="center">
+        android:elevation="12dp">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnExtractSchedule"
+        <!-- 可折叠账号密码快速填充栏 -->
+        <LinearLayout
+            android:id="@+id/layoutAccountManager"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:text="一键抓取并更新课表"
-            android:textSize="15sp"
-            android:textStyle="bold"
-            app:cornerRadius="12dp"
-            app:backgroundTint="@color/primary" />
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp"
+            android:background="@color/surface_variant">
+
+            <EditText
+                android:id="@+id/etUsername"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_round_tag"
+                android:hint="学号/账号"
+                android:inputType="text"
+                android:paddingHorizontal="8dp"
+                android:singleLine="true"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etPassword"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_round_tag"
+                android:hint="登录密码"
+                android:inputType="textPassword"
+                android:paddingHorizontal="8dp"
+                android:singleLine="true"
+                android:textSize="12sp" />
+
+            <CheckBox
+                android:id="@+id/cbRememberPwd"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                android:text="记住"
+                android:textSize="11.5sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnAutoFill"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                android:paddingHorizontal="10dp"
+                android:text="填入"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- 底部主操作栏：地址栏、返回/前进/刷新、UA切换、收藏、抓取 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="6dp">
+
+            <ImageButton
+                android:id="@+id/btnWebBack"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_arrow_back"
+                app:tint="@color/on_surface"
+                android:contentDescription="返回" />
+
+            <EditText
+                android:id="@+id/etUrlInput"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:layout_marginHorizontal="6dp"
+                android:background="@drawable/bg_round_tag"
+                android:hint="输入教务系统网址"
+                android:inputType="textUri"
+                android:imeOptions="actionGo"
+                android:paddingHorizontal="10dp"
+                android:singleLine="true"
+                android:textSize="12sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnToggleUa"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:paddingHorizontal="8dp"
+                android:text="电脑版"
+                android:textSize="11.5sp" />
+
+            <ImageButton
+                android:id="@+id/btnSaveBookmark"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="2dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_star_outline"
+                android:contentDescription="设为默认" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnExtractSchedule"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginStart="6dp"
+                android:paddingHorizontal="12dp"
+                android:text="抓取课表"
+                android:textSize="12sp"
+                app:cornerRadius="10dp"
+                app:backgroundTint="@color/primary" />
+        </LinearLayout>
+
     </LinearLayout>
 
 </LinearLayout>

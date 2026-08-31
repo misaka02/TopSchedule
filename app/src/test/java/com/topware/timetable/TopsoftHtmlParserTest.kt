@@ -60,11 +60,20 @@ class TopsoftHtmlParserTest {
         assertTrue(c1.weeks.contains(5))
         assertTrue(c1.weeks.contains(8))
 
+        // 验证各周次分段教师提取
+        assertEquals("教师A", c1.getTeacherForWeek(1))
+        assertEquals("教师B", c1.getTeacherForWeek(2))
+        assertEquals("教师B", c1.getTeacherForWeek(5))
+        assertEquals("教师B", c1.getTeacherForWeek(7))
+        assertEquals("教师C", c1.getTeacherForWeek(8))
+        assertEquals("教师C", c1.getTeacherForWeek(9))
+
         val c2 = courses[1]
         assertEquals("学术论文写作", c2.name)
         assertEquals(2, c2.dayOfWeek)
         assertEquals("综合楼 201", c2.location)
         assertTrue(c2.weeks.contains(3))
         assertTrue(c2.weeks.contains(9))
+        assertEquals("导师组 1班", c2.getTeacherForWeek(3))
     }
 }

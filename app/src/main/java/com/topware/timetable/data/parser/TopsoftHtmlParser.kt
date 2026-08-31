@@ -1,6 +1,7 @@
 package com.topware.timetable.data.parser
 
 import com.topware.timetable.data.model.Course
+import com.topware.timetable.data.model.TeacherAssignment
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -89,7 +90,7 @@ object TopsoftHtmlParser {
                             }
                         }
 
-                        val weeks = parseWeeks(weeksStr)
+                        val (weeks, assignments) = parseWeeksAndTeacherAssignments(weeksStr, teacher)
                         val periods = Regex("""\d+""").findAll(jieciStr).map { it.value.toInt() }.toList()
                         val startPeriod = periods.minOrNull() ?: 1
                         val endPeriod = periods.maxOrNull() ?: startPeriod
@@ -105,6 +106,7 @@ object TopsoftHtmlParser {
                             periodCount = endPeriod - startPeriod + 1,
                             weeksStr = weeksStr,
                             weeks = weeks,
+                            teacherAssignments = assignments,
                             location = location,
                             department = department,
                             phone = phone,
@@ -121,31 +123,75 @@ object TopsoftHtmlParser {
         return courses
     }
 
-    private fun parseWeeks(weeksStr: String): List<Int> {
-        val result = mutableSetOf<Int>()
-        val cleaned = weeksStr.replace(Regex("""\([^)]*\)"""), "")
-        for (part in cleaned.split(";", "，", "、")) {
-            for (sub in part.split(",")) {
+    /**
+     * 解析周次字符串及各周次阶段的任课教师
+     * 例：周次:1-1(教师A);2-5(教师B);7-7(教师B);8-9(教师C)
+     */
+    fun parseWeeksAndTeacherAssignments(
+        weeksStr: String,
+        defaultTeacher: String
+    ): Pair<List<Int>, List<TeacherAssignment>> {
+        val totalWeeks = mutableSetOf<Int>()
+        val assignments = mutableListOf<TeacherAssignment>()
+
+        if (weeksStr.isBlank()) {
+            return Pair(emptyList(), emptyList())
+        }
+
+        // 分号或逗号分隔各个阶段
+        val parts = weeksStr.split(";", "，", "、", "；")
+        for (rawPart in parts) {
+            val part = rawPart.trim()
+            if (part.isEmpty()) continue
+
+            // 检查是否有括号教师标注，如 "1-8(李老师)" 或 "2(张老师)"
+            val teacherMatch = Regex("""\(([^)]+)\)""").find(part)
+            val stageTeacher = if (teacherMatch != null) {
+                teacherMatch.groupValues[1].trim()
+            } else {
+                defaultTeacher
+            }
+
+            val weekPartOnly = part.replace(Regex("""\([^)]*\)"""), "").replace("周", "").trim()
+            val stageWeeks = mutableSetOf<Int>()
+
+            for (sub in weekPartOnly.split(",")) {
                 val item = sub.trim()
                 if (item.isEmpty()) continue
                 if (item.contains("-")) {
                     val m = Regex("""(\d+)-(\d+)""").find(item)
                     if (m != null) {
-                        val start = m.groupValues[1].toInt()
-                        val end = m.groupValues[2].toInt()
-                        for (w in start..end) {
-                            result.add(w)
+                        val s = m.groupValues[1].toInt()
+                        val e = m.groupValues[2].toInt()
+                        for (w in s..e) {
+                            stageWeeks.add(w)
+                            totalWeeks.add(w)
                         }
                     }
                 } else {
                     val num = item.toIntOrNull()
                     if (num != null) {
-                        result.add(num)
+                        stageWeeks.add(num)
+                        totalWeeks.add(num)
                     }
                 }
             }
+
+            if (stageWeeks.isNotEmpty()) {
+                val sortedStageWeeks = stageWeeks.sorted()
+                assignments.add(
+                    TeacherAssignment(
+                        startWeek = sortedStageWeeks.first(),
+                        endWeek = sortedStageWeeks.last(),
+                        weeks = sortedStageWeeks,
+                        teacherName = stageTeacher,
+                        rawWeeksStr = part
+                    )
+                )
+            }
         }
-        return result.sorted()
+
+        return Pair(totalWeeks.sorted(), assignments)
     }
 
     private fun parseCourseFromText(text: String, dayOfWeek: Int, dayName: String, rowJieci: String): Course? {
@@ -161,7 +207,7 @@ object TopsoftHtmlParser {
                 location = line
             }
         }
-        val weeks = parseWeeks(weeksStr)
+        val (weeks, assignments) = parseWeeksAndTeacherAssignments(weeksStr, teacher)
         val periods = Regex("""\d+""").findAll(rowJieci).map { it.value.toInt() }.toList()
         val startPeriod = periods.minOrNull() ?: 1
         val endPeriod = periods.maxOrNull() ?: startPeriod
@@ -177,6 +223,7 @@ object TopsoftHtmlParser {
             periodCount = endPeriod - startPeriod + 1,
             weeksStr = weeksStr,
             weeks = weeks,
+            teacherAssignments = assignments,
             location = location,
             colorIndex = Math.abs(name.hashCode())
         )

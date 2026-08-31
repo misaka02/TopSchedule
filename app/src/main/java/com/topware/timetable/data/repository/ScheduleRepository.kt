@@ -19,6 +19,9 @@ class ScheduleRepository private constructor(context: Context) {
         private const val KEY_SEMESTER_CONFIG = "key_semester_config"
         private const val KEY_SAVED_JW_URL = "key_saved_jw_url"
         private const val KEY_USE_DESKTOP_UA = "key_use_desktop_ua"
+        private const val KEY_SAVED_USERNAME = "key_saved_username"
+        private const val KEY_SAVED_PASSWORD = "key_saved_password"
+        private const val KEY_REMEMBER_CREDENTIALS = "key_remember_credentials"
 
         @Volatile
         private var instance: ScheduleRepository? = null
@@ -77,15 +80,38 @@ class ScheduleRepository private constructor(context: Context) {
         prefs.edit().putString(KEY_SAVED_JW_URL, url.trim()).apply()
     }
 
-    /**
-     * 默认开启桌面版 UA (true)
-     */
     fun isDesktopUaEnabled(): Boolean {
         return prefs.getBoolean(KEY_USE_DESKTOP_UA, true)
     }
 
     fun setDesktopUaEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_USE_DESKTOP_UA, enabled).apply()
+    }
+
+    // --- 账号密码保存与自动填充 ---
+    fun isRememberCredentials(): Boolean {
+        return prefs.getBoolean(KEY_REMEMBER_CREDENTIALS, false)
+    }
+
+    fun getSavedUsername(): String {
+        return if (isRememberCredentials()) prefs.getString(KEY_SAVED_USERNAME, "") ?: "" else ""
+    }
+
+    fun getSavedPassword(): String {
+        return if (isRememberCredentials()) prefs.getString(KEY_SAVED_PASSWORD, "") ?: "" else ""
+    }
+
+    fun saveCredentials(username: String, password: String, remember: Boolean) {
+        val editor = prefs.edit()
+        editor.putBoolean(KEY_REMEMBER_CREDENTIALS, remember)
+        if (remember) {
+            editor.putString(KEY_SAVED_USERNAME, username.trim())
+            editor.putString(KEY_SAVED_PASSWORD, password)
+        } else {
+            editor.remove(KEY_SAVED_USERNAME)
+            editor.remove(KEY_SAVED_PASSWORD)
+        }
+        editor.apply()
     }
 
     fun getCoursesForWeek(week: Int): List<Course> {

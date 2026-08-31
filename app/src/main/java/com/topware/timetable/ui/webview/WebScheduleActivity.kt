@@ -38,6 +38,7 @@ class WebScheduleActivity : AppCompatActivity() {
         isDesktopUa = repository.isDesktopUaEnabled()
 
         setupListeners()
+        setupCredentials()
         setupWebView()
 
         val savedUrl = repository.getSavedJwUrl()
@@ -51,6 +52,40 @@ class WebScheduleActivity : AppCompatActivity() {
         }
     }
 
+    private fun setupCredentials() {
+        binding.cbRememberPwd.isChecked = repository.isRememberCredentials()
+        binding.etUsername.setText(repository.getSavedUsername())
+        binding.etPassword.setText(repository.getSavedPassword())
+
+        binding.btnAutoFill.setOnClickListener {
+            val user = binding.etUsername.text.toString().trim()
+            val pwd = binding.etPassword.text.toString()
+            val remember = binding.cbRememberPwd.isChecked
+
+            repository.saveCredentials(user, pwd, remember)
+
+            // 通过 JavaScript 将账号密码填入网页表单
+            val js = """
+                (function() {
+                    var userInputs = document.querySelectorAll('input[type="text"], input[name*="user"], input[name*="account"], input[id*="user"], input[id*="account"]');
+                    for (var i = 0; i < userInputs.length; i++) {
+                        userInputs[i].value = '$user';
+                        userInputs[i].dispatchEvent(new Event('input', { bubbles: true }));
+                        userInputs[i].dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                    var pwdInputs = document.querySelectorAll('input[type="password"], input[name*="pwd"], input[name*="pass"], input[id*="pwd"], input[id*="pass"]');
+                    for (var j = 0; j < pwdInputs.length; j++) {
+                        pwdInputs[j].value = '$pwd';
+                        pwdInputs[j].dispatchEvent(new Event('input', { bubbles: true }));
+                        pwdInputs[j].dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                })();
+            """.trimIndent()
+            binding.webView.evaluateJavascript(js, null)
+            Toast.makeText(this, "已尝试自动填入账号密码", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun setupListeners() {
         binding.btnWebBack.setOnClickListener {
             if (binding.webView.canGoBack()) {
@@ -60,18 +95,10 @@ class WebScheduleActivity : AppCompatActivity() {
             }
         }
 
-        binding.btnGoUrl.setOnClickListener {
-            val url = binding.etUrlInput.text.toString().trim()
-            if (url.isNotEmpty()) {
-                loadUrl(url)
-            } else {
-                Toast.makeText(this, "请输入教务系统网址", Toast.LENGTH_SHORT).show()
-            }
-        }
-
         binding.etUrlInput.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_GO || actionId == EditorInfo.IME_ACTION_DONE) {
-                binding.btnGoUrl.performClick()
+                val url = binding.etUrlInput.text.toString().trim()
+                if (url.isNotEmpty()) loadUrl(url)
                 true
             } else {
                 false
@@ -83,7 +110,7 @@ class WebScheduleActivity : AppCompatActivity() {
             repository.setDesktopUaEnabled(isDesktopUa)
             applyUserAgent()
             val modeName = if (isDesktopUa) "电脑版 (PC)" else "手机版 (Mobile)"
-            Toast.makeText(this, "已切换为 $modeName，正在重新加载...", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "已切换为 $modeName", Toast.LENGTH_SHORT).show()
             binding.webView.reload()
         }
 
@@ -98,7 +125,7 @@ class WebScheduleActivity : AppCompatActivity() {
                 } else {
                     repository.saveJwUrl(currentUrl)
                     updateBookmarkIcon(true)
-                    Toast.makeText(this, "已设为默认教务地址，下次进入将自动打开", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "已设为默认教务地址", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -192,7 +219,7 @@ class WebScheduleActivity : AppCompatActivity() {
     }
 
     private fun extractScheduleHtml() {
-        Toast.makeText(this, "正在抓取页面课表内容...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "正在抓取课表内容...", Toast.LENGTH_SHORT).show()
         val js = """
             (function() {
                 var fullHtml = document.documentElement.outerHTML;

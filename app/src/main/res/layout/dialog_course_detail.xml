@@ -28,9 +28,9 @@
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:layout_marginVertical="12dp"
-            android:background="#E5E7EB" />
+            android:background="@color/outline" />
 
-        <!-- Time -->
+        <!-- 时间 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -57,7 +57,7 @@
                 android:textStyle="bold" />
         </LinearLayout>
 
-        <!-- Location -->
+        <!-- 地点 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -83,7 +83,7 @@
                 android:textSize="14sp" />
         </LinearLayout>
 
-        <!-- Teacher -->
+        <!-- 当前周教师 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -104,12 +104,39 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="10dp"
                 android:layout_weight="1"
-                android:text="任课教师"
+                android:text="本周教师：李老师"
                 android:textColor="@color/on_surface"
                 android:textSize="14sp" />
         </LinearLayout>
 
-        <!-- Weeks -->
+        <!-- 全周期任课安排 -->
+        <LinearLayout
+            android:id="@+id/layoutAllTeachers"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="各周次任课教师安排"
+                android:textColor="@color/on_surface_variant"
+                android:textSize="12sp"
+                android:layout_marginStart="28dp" />
+
+            <TextView
+                android:id="@+id/dialogAllTeachers"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="28dp"
+                android:layout_marginTop="2dp"
+                android:text="1-8周：李老师\n9-16周：王老师"
+                android:textColor="@color/on_surface"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <!-- 周次 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -135,7 +162,7 @@
                 android:textSize="14sp" />
         </LinearLayout>
 
-        <!-- Department -->
+        <!-- 院系 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -162,7 +189,7 @@
                 android:textSize="13sp" />
         </LinearLayout>
 
-        <!-- Phone -->
+        <!-- 电话 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

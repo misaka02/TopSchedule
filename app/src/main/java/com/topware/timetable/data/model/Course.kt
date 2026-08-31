@@ -22,6 +22,7 @@ data class Course(
     val periodCount: Int = endPeriod - startPeriod + 1,
     val weeksStr: String = "",
     val weeks: List<Int> = emptyList(),
+    val teacherAssignments: List<TeacherAssignment> = emptyList(),
     val location: String = "",
     val department: String = "",
     val phone: String = "",
@@ -30,6 +31,18 @@ data class Course(
 
     fun isHappeningInWeek(weekNumber: Int): Boolean {
         return weeks.isEmpty() || weeks.contains(weekNumber)
+    }
+
+    /**
+     * 获取指定周次对应的任课教师
+     */
+    fun getTeacherForWeek(weekNumber: Int): String {
+        val assignment = teacherAssignments.firstOrNull { it.weeks.contains(weekNumber) }
+        return if (assignment != null && assignment.teacherName.isNotBlank()) {
+            assignment.teacherName
+        } else {
+            teacher.ifBlank { "待定" }
+        }
     }
 
     fun getStartTime(): String {
@@ -48,9 +61,6 @@ data class Course(
         return if (startPeriod == endPeriod) "第 $startPeriod 节" else "第 $startPeriod-$endPeriod 节"
     }
 
-    /**
-     * 计算当前课程在今日此时的状态
-     */
     fun calculateStatus(cal: Calendar = Calendar.getInstance()): CourseStatus {
         val currentMinutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
         val startMinutes = TimeSlot.parseTimeToMinutes(getStartTime())
@@ -58,14 +68,11 @@ data class Course(
 
         return when {
             currentMinutes in startMinutes..endMinutes -> CourseStatus.ONGOING
-            currentMinutes < startMinutes -> CourseStatus.FUTURE // Later determined if it's the NEXT_UPCOMING
+            currentMinutes < startMinutes -> CourseStatus.FUTURE
             else -> CourseStatus.FINISHED
         }
     }
 
-    /**
-     * 获取距课程开始的剩余分钟数 (若已开始或已结束则返回负数或0)
-     */
     fun getMinutesUntilStart(cal: Calendar = Calendar.getInstance()): Int {
         val currentMinutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
         val startMinutes = TimeSlot.parseTimeToMinutes(getStartTime())

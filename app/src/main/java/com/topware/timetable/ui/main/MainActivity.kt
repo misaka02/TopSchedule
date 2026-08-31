@@ -103,7 +103,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateWeekView() {
         val count = repository.getCoursesForWeek(selectedWeek).size
         binding.tvCurrentWeekInfo.text = "当前：第 $selectedWeek 周 · 共 $count 节课程"
-        binding.timetableView.setCourses(repository.getCoursesForWeek(selectedWeek))
+        binding.timetableView.setCourses(repository.getCoursesForWeek(selectedWeek), selectedWeek)
     }
 
     private fun showCourseDetail(course: Course) {
@@ -115,7 +115,20 @@ class MainActivity : AppCompatActivity() {
         view.findViewById<TextView>(R.id.dialogCourseName).text = course.name
         view.findViewById<TextView>(R.id.dialogTime).text = "${course.dayName} ${course.getFormattedPeriodRange()} (${course.getFormattedTimeRange()})"
         view.findViewById<TextView>(R.id.dialogLocation).text = course.location.ifBlank { "待定" }
-        view.findViewById<TextView>(R.id.dialogTeacher).text = course.teacher.ifBlank { "待定" }
+                val curTeacher = course.getTeacherForWeek(selectedWeek)
+        view.findViewById<TextView>(R.id.dialogTeacher).text = "本周教师：$curTeacher"
+
+        val allTeachersTv = view.findViewById<TextView>(R.id.dialogAllTeachers)
+        if (course.teacherAssignments.isNotEmpty()) {
+            val sb = StringBuilder()
+            for (item in course.teacherAssignments) {
+                val weekRange = if (item.startWeek == item.endWeek) "第 ${item.startWeek} 周" else "第 ${item.startWeek}-${item.endWeek} 周"
+                sb.append("$weekRange: ${item.teacherName}\n")
+            }
+            allTeachersTv.text = sb.toString().trimEnd()
+        } else {
+            allTeachersTv.text = "全周: ${course.teacher.ifBlank { "待定" }}"
+        }
         view.findViewById<TextView>(R.id.dialogWeeks).text = course.weeksStr.ifBlank { "全周" }
         view.findViewById<TextView>(R.id.dialogDepartment).text = course.department.ifBlank { "教务处" }
         view.findViewById<TextView>(R.id.dialogPhone).text = course.phone.ifBlank { "暂无" }
