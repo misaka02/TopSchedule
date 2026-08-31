@@ -11,8 +11,8 @@ android {
         applicationId = "com.topware.timetable"
         minSdk = 26
         targetSdk = 34
-        versionCode = 13
-        versionName = "1.3.6"
+        versionCode = 14
+        versionName = "1.3.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

@@ -5,14 +5,13 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.viewpager2.widget.ViewPager2
 import com.topware.timetable.data.model.Course
-import com.topware.timetable.data.repository.ScheduleRepository
 import com.topware.timetable.ui.floating.FloatingScheduleActivity
 import com.topware.timetable.ui.main.MainActivity
 import com.topware.timetable.ui.view.TimetableView
 import com.topware.timetable.ui.webview.WebScheduleActivity
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -31,7 +30,6 @@ class ActivityLaunchTest {
         val timetableView = activity.findViewById<TimetableView>(R.id.timetableView)
         assertNotNull(timetableView)
 
-        // 模拟 Canvas 真实绘制
         val bitmap = Bitmap.createBitmap(1080, 2400, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         timetableView.draw(canvas)
@@ -45,12 +43,17 @@ class ActivityLaunchTest {
         val activity = controller.create().start().resume().visible().get()
         assertNotNull(activity)
 
-        val floatingTimetableView = activity.findViewById<TimetableView>(R.id.floatingTimetableView)
-        assertNotNull(floatingTimetableView)
+        val viewPager = activity.findViewById<ViewPager2>(R.id.viewPagerFloating)
+        assertNotNull(viewPager)
+
+        // 切换到周课表页并验证
+        viewPager.setCurrentItem(1, false)
 
         val bitmap = Bitmap.createBitmap(1080, 2400, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        floatingTimetableView.draw(canvas)
+
+        val timetableView = activity.findViewById<TimetableView>(R.id.floatingTimetableView)
+        timetableView?.draw(canvas)
 
         controller.pause().stop().destroy()
     }

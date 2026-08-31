@@ -179,7 +179,7 @@ class ScheduleRepository private constructor(context: Context) {
      * 悬浮窗默认打开的视图：0 为当日课表，1 为周课表（默认直接打开周课表总览）
      */
     fun getFloatingDefaultTab(): Int {
-        return prefs.getInt(KEY_FLOATING_DEFAULT_TAB, 1) // 默认打开 1 (周课表总览)
+        return prefs.getInt(KEY_FLOATING_DEFAULT_TAB, 0) // 默认直接打开 0 (当日课表聚焦)
     }
 
     fun setFloatingDefaultTab(tabIndex: Int) {

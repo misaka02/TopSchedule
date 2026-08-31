@@ -12,11 +12,11 @@
         android:id="@+id/cardFloating"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_marginHorizontal="12dp"
-        android:layout_marginVertical="20dp"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginVertical="44dp"
         android:clickable="true"
         android:focusable="true"
-        app:cardCornerRadius="20dp"
+        app:cardCornerRadius="24dp"
         app:cardElevation="16dp"
         app:strokeWidth="1dp"
         app:strokeColor="@color/outline"
@@ -26,9 +26,9 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:orientation="vertical"
-            android:padding="12dp">
+            android:padding="16dp">
 
-            <!-- 顶部导航栏：上一周、当前周标题、下一周、关闭按钮 -->
+            <!-- 顶部导航栏：周次切换与关闭按钮 -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -69,86 +69,55 @@
                     android:id="@+id/btnCloseFloating"
                     android:layout_width="36dp"
                     android:layout_height="36dp"
-                    android:layout_marginStart="6dp"
+                    android:layout_marginStart="8dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:src="@drawable/ic_close"
                     app:tint="@color/on_surface_variant"
                     android:contentDescription="关闭" />
             </LinearLayout>
 
-            <!-- 视图切换：周课表（主视图） / 当日聚焦 -->
+            <!-- 顶部平滑切换胶囊：当日课表（默认） / 周课表 -->
             <com.google.android.material.button.MaterialButtonToggleGroup
                 android:id="@+id/toggleGroupMode"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:layout_marginBottom="8dp"
+                android:layout_marginTop="10dp"
+                android:layout_marginBottom="10dp"
                 app:singleSelection="true"
                 app:selectionRequired="true">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnTabWeek"
-                    style="@style/Widget.Material3.Button.OutlinedButton"
-                    android:layout_width="0dp"
-                    android:layout_height="36dp"
-                    android:layout_weight="1"
-                    android:text="周课表"
-                    android:textSize="13sp" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnTabToday"
                     style="@style/Widget.Material3.Button.OutlinedButton"
                     android:layout_width="0dp"
-                    android:layout_height="36dp"
+                    android:layout_height="38dp"
                     android:layout_weight="1"
                     android:text="当日课表"
                     android:textSize="13sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnTabWeek"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_weight="1"
+                    android:text="周课表"
+                    android:textSize="13sp" />
             </com.google.android.material.button.MaterialButtonToggleGroup>
 
-            <!-- 完整周课表视图容器（主视图） -->
-            <androidx.core.widget.NestedScrollView
-                android:id="@+id/containerWeekView"
+            <!-- 左右平滑滑动的 ViewPager2 容器 -->
+            <androidx.viewpager2.widget.ViewPager2
+                android:id="@+id/viewPagerFloating"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
-                android:layout_weight="1"
-                android:fillViewport="true">
-
-                <com.topware.timetable.ui.view.TimetableView
-                    android:id="@+id/floatingTimetableView"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content" />
-            </androidx.core.widget.NestedScrollView>
-
-            <!-- 当日课表列表容器 -->
-            <FrameLayout
-                android:id="@+id/containerTodayView"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:visibility="gone">
-
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/rvTodayCourses"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent" />
-
-                <TextView
-                    android:id="@+id/tvEmptyToday"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:gravity="center"
-                    android:text="今日无课程安排"
-                    android:textColor="@color/on_surface_variant"
-                    android:textSize="14sp"
-                    android:visibility="gone" />
-            </FrameLayout>
+                android:layout_weight="1" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center"
-                android:paddingTop="6dp"
-                android:text="点击外部空白区域或按返回键关闭"
+                android:paddingTop="8dp"
+                android:text="左右滑动切换 · 点击空白处或返回键退出"
                 android:textColor="@color/on_surface_variant"
                 android:textSize="11sp" />
 

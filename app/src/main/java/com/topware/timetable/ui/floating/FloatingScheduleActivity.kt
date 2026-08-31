@@ -10,12 +10,15 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.button.MaterialButton
 import com.topware.timetable.R
 import com.topware.timetable.data.model.Course
 import com.topware.timetable.data.model.CourseStatus
 import com.topware.timetable.data.repository.ScheduleRepository
 import com.topware.timetable.databinding.ActivityFloatingScheduleBinding
+import com.topware.timetable.databinding.ItemPageTodayBinding
+import com.topware.timetable.databinding.ItemPageWeekBinding
 import com.topware.timetable.databinding.ItemTodayCourseBinding
 import com.topware.timetable.util.TimeUtils
 import java.util.Calendar
@@ -27,6 +30,7 @@ class FloatingScheduleActivity : AppCompatActivity() {
     private var actualCurrentWeek: Int = 1
     private var selectedWeek: Int = 1
     private var currentDay: Int = 1
+    private lateinit var pagerAdapter: FloatingPagerAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,20 +57,20 @@ class FloatingScheduleActivity : AppCompatActivity() {
     }
 
     private fun initViews() {
-        // 点击外部空白区域退隐
+        // 点击外部空白背景区域关闭
         binding.rootContainer.setOnClickListener {
             finishWithAnimation()
         }
 
         binding.cardFloating.setOnClickListener {
-            // 拦截点击，防止穿透到背景
+            // 拦截点击，防止穿透
         }
 
         binding.btnCloseFloating.setOnClickListener {
             finishWithAnimation()
         }
 
-        // 监听返回键与手势返回
+        // 返回键与手势返回关闭
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 finishWithAnimation()
@@ -93,43 +97,45 @@ class FloatingScheduleActivity : AppCompatActivity() {
 
         updateWeekTitle()
 
-        // 默认显示【周课表】（完整课表网格）
-        val defaultTab = repository.getFloatingDefaultTab() // 1: Week, 0: Today
+        // 设置 ViewPager2 与左右滑动适配器
+        pagerAdapter = FloatingPagerAdapter()
+        binding.viewPagerFloating.adapter = pagerAdapter
+
+        // 默认显示【当日课表】（Page 0）
+        val defaultTab = repository.getFloatingDefaultTab() // 0: Today, 1: Week
         if (defaultTab == 1) {
             binding.toggleGroupMode.check(R.id.btnTabWeek)
-            showWeekView()
+            binding.viewPagerFloating.setCurrentItem(1, false)
         } else {
             binding.toggleGroupMode.check(R.id.btnTabToday)
-            showTodayView()
+            binding.viewPagerFloating.setCurrentItem(0, false)
         }
 
+        // 按钮点击联动 ViewPager2
         binding.toggleGroupMode.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (isChecked) {
                 if (checkedId == R.id.btnTabWeek) {
-                    showWeekView()
+                    binding.viewPagerFloating.setCurrentItem(1, true)
                     repository.setFloatingDefaultTab(1)
                 } else {
-                    showTodayView()
+                    binding.viewPagerFloating.setCurrentItem(0, true)
                     repository.setFloatingDefaultTab(0)
                 }
             }
         }
 
-        binding.rvTodayCourses.layoutManager = LinearLayoutManager(this)
-
-        binding.floatingTimetableView.setOnCourseClickListener { course ->
-            showCourseDetail(course)
-        }
-    }
-
-    private fun showWeekView() {
-        binding.containerWeekView.visibility = View.VISIBLE
-        binding.containerTodayView.visibility = View.GONE
-    }
-
-    private fun showTodayView() {
-        binding.containerWeekView.visibility = View.GONE
-        binding.containerTodayView.visibility = View.VISIBLE
+        // 滑动 ViewPager2 联动按钮
+        binding.viewPagerFloating.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                if (position == 1) {
+                    binding.toggleGroupMode.check(R.id.btnTabWeek)
+                    repository.setFloatingDefaultTab(1)
+                } else {
+                    binding.toggleGroupMode.check(R.id.btnTabToday)
+                    repository.setFloatingDefaultTab(0)
+                }
+            }
+        })
     }
 
     private fun updateWeekTitle() {
@@ -142,37 +148,7 @@ class FloatingScheduleActivity : AppCompatActivity() {
     }
 
     private fun loadData() {
-        // 1. 加载周课表数据
-        val weekCourses = repository.getCoursesForWeek(selectedWeek)
-        binding.floatingTimetableView.setCourses(weekCourses, selectedWeek)
-
-        // 2. 加载当日课表数据
-        val todayCourses = repository.getCoursesForDay(selectedWeek, currentDay)
-        if (todayCourses.isEmpty()) {
-            binding.rvTodayCourses.visibility = View.GONE
-            binding.tvEmptyToday.visibility = View.VISIBLE
-        } else {
-            binding.rvTodayCourses.visibility = View.VISIBLE
-            binding.tvEmptyToday.visibility = View.GONE
-
-            val nowCal = Calendar.getInstance()
-            var nextFound = false
-            val sortedList = todayCourses.sortedBy { it.startPeriod }
-            val courseWithStatus = sortedList.map { course ->
-                val rawStatus = course.calculateStatus(nowCal)
-                val finalStatus = if (rawStatus == CourseStatus.FUTURE && !nextFound) {
-                    nextFound = true
-                    CourseStatus.NEXT_UPCOMING
-                } else {
-                    rawStatus
-                }
-                Pair(course, finalStatus)
-            }
-
-            binding.rvTodayCourses.adapter = TodayCourseAdapter(courseWithStatus, nowCal) { course ->
-                showCourseDetail(course)
-            }
-        }
+        pagerAdapter.notifyDataSetChanged()
     }
 
     private fun showCourseDetail(course: Course) {
@@ -214,6 +190,77 @@ class FloatingScheduleActivity : AppCompatActivity() {
         finish()
         @Suppress("DEPRECATION")
         overridePendingTransition(R.anim.floating_enter, R.anim.floating_exit)
+    }
+
+    inner class FloatingPagerAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+
+        override fun getItemCount(): Int = 2
+
+        override fun getItemViewType(position: Int): Int = position
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+            return if (viewType == 0) {
+                val b = ItemPageTodayBinding.inflate(LayoutInflater.from(parent.context), parent, false)
+                TodayViewHolder(b)
+            } else {
+                val b = ItemPageWeekBinding.inflate(LayoutInflater.from(parent.context), parent, false)
+                WeekViewHolder(b)
+            }
+        }
+
+        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+            if (holder is TodayViewHolder) {
+                holder.bind()
+            } else if (holder is WeekViewHolder) {
+                holder.bind()
+            }
+        }
+
+        inner class TodayViewHolder(private val pageBinding: ItemPageTodayBinding) :
+            RecyclerView.ViewHolder(pageBinding.root) {
+
+            fun bind() {
+                val todayCourses = repository.getCoursesForDay(selectedWeek, currentDay)
+                if (todayCourses.isEmpty()) {
+                    pageBinding.rvTodayCourses.visibility = View.GONE
+                    pageBinding.tvEmptyToday.visibility = View.VISIBLE
+                } else {
+                    pageBinding.rvTodayCourses.visibility = View.VISIBLE
+                    pageBinding.tvEmptyToday.visibility = View.GONE
+
+                    val nowCal = Calendar.getInstance()
+                    var nextFound = false
+                    val sortedList = todayCourses.sortedBy { it.startPeriod }
+                    val courseWithStatus = sortedList.map { course ->
+                        val rawStatus = course.calculateStatus(nowCal)
+                        val finalStatus = if (rawStatus == CourseStatus.FUTURE && !nextFound) {
+                            nextFound = true
+                            CourseStatus.NEXT_UPCOMING
+                        } else {
+                            rawStatus
+                        }
+                        Pair(course, finalStatus)
+                    }
+
+                    pageBinding.rvTodayCourses.layoutManager = LinearLayoutManager(this@FloatingScheduleActivity)
+                    pageBinding.rvTodayCourses.adapter = TodayCourseAdapter(courseWithStatus, nowCal) { course ->
+                        showCourseDetail(course)
+                    }
+                }
+            }
+        }
+
+        inner class WeekViewHolder(private val pageBinding: ItemPageWeekBinding) :
+            RecyclerView.ViewHolder(pageBinding.root) {
+
+            fun bind() {
+                val weekCourses = repository.getCoursesForWeek(selectedWeek)
+                pageBinding.floatingTimetableView.setCourses(weekCourses, selectedWeek)
+                pageBinding.floatingTimetableView.setOnCourseClickListener { course ->
+                    showCourseDetail(course)
+                }
+            }
+        }
     }
 
     inner class TodayCourseAdapter(
