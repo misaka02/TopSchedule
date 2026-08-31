@@ -71,15 +71,15 @@ class WebScheduleActivity : AppCompatActivity() {
                     repository.saveCourses(courses)
                     AlertDialog.Builder(this)
                         .setTitle("本地课表导入成功")
-                        .setMessage("成功从本地网页解析到 " + courses.size + " 门次课程。\n主课表与悬浮窗已全部同步更新。")
-                        .setPositiveButton("查看") { _, _ -> finish() }
+                        .setMessage("成功解析并导入 ${courses.size} 门次课程。\n主界面与悬浮窗均已更新。")
+                        .setPositiveButton("查看课表") { _, _ -> finish() }
                         .show()
                 } else {
-                    Toast.makeText(this, "未能从选中的文件中识别到课表表格", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "未能从选中的文件中解析到课表数据", Toast.LENGTH_LONG).show()
                 }
             }
         } catch (e: Exception) {
-            Toast.makeText(this, "读取文件失败：" + e.message, Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "读取文件失败：${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -358,114 +358,102 @@ class WebScheduleActivity : AppCompatActivity() {
     }
 
     private fun extractScheduleHtml() {
-        Toast.makeText(this, "正在深度递归抓取所有框架课表...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "正在直接提取当前课表...", Toast.LENGTH_SHORT).show()
         val js = """
             (function() {
                 var collectedCourses = [];
-                var allHtml = '';
+                var blacklist = { '考生来源':1, '考试方式':1, '最后学历学习形式':1, '校外导师':1, '学号':1, '姓名':1 };
 
-                function inspectWindow(win) {
-                    if (!win) return;
+                function processDoc(doc) {
+                    if (!doc) return;
                     try {
-                        var doc = win.document;
-                        if (!doc) return;
-                        allHtml += doc.documentElement.outerHTML + '
-';
+                        // 1. 精确匹配包含 course_card 类名的卡片
+                        var cards = doc.querySelectorAll('.course_card, [class*="course_card"]');
+                        for (var i = 0; i < cards.length; i++) {
+                            var card = cards[i];
+                            var nameEl = card.querySelector('.course_name') || card.querySelector('.course_title');
+                            var name = nameEl ? nameEl.innerText.trim() : '';
+                            if (!name || blacklist[name]) continue;
 
-                        // 查找包含课程文本的所有卡片元素
-                        var elements = doc.querySelectorAll('div, td');
-                        for (var i = 0; i < elements.length; i++) {
-                            var el = elements[i];
-                            var cls = el.className || '';
-                            if (typeof cls !== 'string') cls = '';
-                            var txt = el.innerText || '';
+                            var teaEl = card.querySelector('.course_tea_name');
+                            var teacher = teaEl ? teaEl.innerText.trim() : '';
 
-                            var isCard = (cls.indexOf('course_card') !== -1) || 
-                                         (txt.indexOf('节次:') !== -1 && txt.indexOf('周次:') !== -1);
+                            var td = card.closest('td');
+                            var dayOfWeek = 1;
+                            var dayName = '周一';
+                            var dayMap = { 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6, 'Sunday': 7 };
+                            var dayNames = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
-                            if (isCard && txt.length > 5) {
-                                var td = el.tagName === 'TD' ? el : el.closest('td');
-                                var dayOfWeek = 1;
-                                var dayName = '周一';
-
-                                if (td) {
-                                    var field = td.getAttribute('field') || '';
-                                    if (field === 'Monday') { dayOfWeek = 1; dayName = '周一'; }
-                                    else if (field === 'Tuesday') { dayOfWeek = 2; dayName = '周二'; }
-                                    else if (field === 'Wednesday') { dayOfWeek = 3; dayName = '周三'; }
-                                    else if (field === 'Thursday') { dayOfWeek = 4; dayName = '周四'; }
-                                    else if (field === 'Friday') { dayOfWeek = 5; dayName = '周五'; }
-                                    else if (field === 'Saturday') { dayOfWeek = 6; dayName = '周六'; }
-                                    else if (field === 'Sunday') { dayOfWeek = 7; dayName = '周日'; }
-                                    else {
-                                        var idx = td.cellIndex;
-                                        if (idx !== undefined && idx >= 2 && idx <= 8) {
-                                            dayOfWeek = idx - 1;
-                                            var names = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-                                            dayName = names[dayOfWeek] || '周一';
-                                        }
-                                    }
+                            if (td) {
+                                var field = td.getAttribute('field') || '';
+                                if (dayMap[field]) {
+                                    dayOfWeek = dayMap[field];
+                                } else if (td.cellIndex !== undefined && td.cellIndex >= 2 && td.cellIndex <= 8) {
+                                    dayOfWeek = td.cellIndex - 1;
                                 }
-
-                                var lines = txt.split('
-').map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
-                                var name = '';
-                                var teacher = '';
-                                var jieci = '1,2';
-                                var weeks = '';
-                                var location = '';
-                                var department = '';
-                                var phone = '';
-
-                                for (var l = 0; l < lines.length; l++) {
-                                    var line = lines[l];
-                                    if (line.indexOf('节次:') !== -1) {
-                                        jieci = line.replace('节次:', '').replace('节', '').trim();
-                                    } else if (line.indexOf('周次:') !== -1) {
-                                        weeks = line.replace('周次:', '').trim();
-                                    } else if (line.indexOf('地点:') !== -1) {
-                                        location = line.replace('地点:', '').trim();
-                                    } else if (line.indexOf('开课院系:') !== -1) {
-                                        department = line.replace('开课院系:', '').trim();
-                                    } else if (line.indexOf('电话:') !== -1) {
-                                        phone = line.replace('电话:', '').trim();
-                                    } else if (!name && line.indexOf(':') === -1 && line.indexOf('：') === -1) {
-                                        name = line;
-                                    } else if (!teacher && line.indexOf(':') === -1 && line.indexOf('：') === -1 && line !== name) {
-                                        teacher = line;
-                                    }
-                                }
-
-                                if (name && weeks && name !== '考生来源' && name !== '考试方式' && name !== '最后学历学习形式' && name !== '校外导师') {
-                                    collectedCourses.push({
-                                        name: name,
-                                        teacher: teacher,
-                                        dayOfWeek: dayOfWeek,
-                                        dayName: dayName,
-                                        jieci: jieci,
-                                        weeksStr: weeks,
-                                        location: location,
-                                        department: department,
-                                        phone: phone
-                                    });
-                                }
+                                dayName = dayNames[dayOfWeek] || '周一';
                             }
-                        }
-                    } catch(e) {}
 
-                    try {
-                        if (win.frames) {
-                            for (var f = 0; f < win.frames.length; f++) {
-                                try {
-                                    inspectWindow(win.frames[f]);
-                                } catch(e) {}
+                            var tr = card.closest('tr');
+                            var jieciTd = tr ? tr.querySelector('td[field="JieCi"]') : null;
+                            var jieci = jieciTd ? jieciTd.innerText.trim() : '1,2';
+
+                            var dtls = card.querySelectorAll('.course_dtl');
+                            var weeksStr = '';
+                            var location = '';
+                            var department = '';
+                            var phone = '';
+
+                            for (var k = 0; k < dtls.length; k++) {
+                                var txt = dtls[k].innerText.trim();
+                                if (txt.indexOf('节次:') === 0 || txt.indexOf('节次：') === 0) jieci = txt.replace(/节次[:：]/, '').replace('节', '').trim();
+                                else if (txt.indexOf('周次:') === 0 || txt.indexOf('周次：') === 0) weeksStr = txt.replace(/周次[:：]/, '').trim();
+                                else if (txt.indexOf('地点:') === 0 || txt.indexOf('地点：') === 0) location = txt.replace(/地点[:：]/, '').trim();
+                                else if (txt.indexOf('开课院系:') === 0 || txt.indexOf('开课院系：') === 0) department = txt.replace(/开课院系[:：]/, '').trim();
+                                else if (txt.indexOf('电话:') === 0 || txt.indexOf('电话：') === 0) phone = txt.replace(/电话[:：]/, '').trim();
                             }
+
+                            collectedCourses.push({
+                                name: name,
+                                teacher: teacher,
+                                dayOfWeek: dayOfWeek,
+                                dayName: dayName,
+                                jieci: jieci,
+                                weeksStr: weeksStr,
+                                location: location,
+                                department: department,
+                                phone: phone
+                            });
                         }
                     } catch(e) {}
                 }
 
-                inspectWindow(window);
-                ScheduleBridge.processResult(JSON.stringify(collectedCourses), allHtml);
+                function walk(w) {
+                    if (!w) return;
+                    try {
+                        processDoc(w.document);
+                    } catch(e) {}
+                    try {
+                        if (w.frames && w.frames.length > 0) {
+                            for (var i = 0; i < w.frames.length; i++) {
+                                try {
+                                    walk(w.frames[i]);
+                                } catch(e) {}
+                            }
+                        }
+                    } catch(e) {}
+                    try {
+                        var iframes = w.document ? w.document.querySelectorAll('iframe, frame') : [];
+                        for (var j = 0; j < iframes.length; j++) {
+                            try {
+                                processDoc(iframes[j].contentDocument || iframes[j].contentWindow.document);
+                            } catch(e) {}
+                        }
+                    } catch(e) {}
+                }
+
+                walk(window);
+                ScheduleBridge.processResult(JSON.stringify(collectedCourses));
             })();
         """.trimIndent()
 
@@ -484,7 +472,7 @@ class WebScheduleActivity : AppCompatActivity() {
         val phone: String = ""
     )
 
-    fun onResultReceived(json: String, html: String) {
+    fun onResultReceived(json: String) {
         runOnUiThread {
             var courses: List<Course> = emptyList()
 
@@ -521,10 +509,6 @@ class WebScheduleActivity : AppCompatActivity() {
                 }
             }
 
-            if (courses.isEmpty() && html.isNotBlank()) {
-                courses = TopsoftHtmlParser.parse(html)
-            }
-
             if (courses.isNotEmpty()) {
                 repository.saveCourses(courses)
                 val currentUrl = binding.webView.url
@@ -534,15 +518,15 @@ class WebScheduleActivity : AppCompatActivity() {
 
                 AlertDialog.Builder(this)
                     .setTitle("课表抓取成功")
-                    .setMessage("成功解析到 " + courses.size + " 门次课程。\n主课表与悬浮窗已全部同步更新。")
-                    .setPositiveButton("查看") { _, _ ->
+                    .setMessage("成功解析到 ${courses.size} 门次课程。\n主课表与悬浮窗已全部同步更新。")
+                    .setPositiveButton("查看课表") { _, _ ->
                         finish()
                     }
                     .show()
             } else {
                 AlertDialog.Builder(this)
                     .setTitle("未检测到课表")
-                    .setMessage("已抓取页面全部框架（共 " + html.length + " 字符），但未能识别到课表表格。\n\n建议：\n1. 请在教务系统中点击左侧菜单进入【我的课表】或【学生课表】页面；\n2. 长按【抓取课表】按钮可直接导入手机本地已保存的 HTML 课表网页。")
+                    .setMessage("未能从当前页面中扫描到课程卡片。\n\n建议：\n1. 请在教务系统中点击左侧【培养】->【我的课程表】进入课表；\n2. 长按【抓取课表】按钮可直接导入手机本地已保存的 HTML 课表网页。")
                     .setPositiveButton("我知道了", null)
                     .setNeutralButton("导入本地网页") { _, _ ->
                         selectHtmlLauncher.launch("*/*")
@@ -554,8 +538,8 @@ class WebScheduleActivity : AppCompatActivity() {
 
     class ScheduleJsBridge(private val activity: WebScheduleActivity) {
         @JavascriptInterface
-        fun processResult(json: String, html: String) {
-            activity.onResultReceived(json, html)
+        fun processResult(json: String) {
+            activity.onResultReceived(json)
         }
     }
 }
