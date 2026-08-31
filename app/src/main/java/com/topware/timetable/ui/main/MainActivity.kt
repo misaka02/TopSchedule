@@ -15,7 +15,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.chip.Chip
 import com.topware.timetable.R
 import com.topware.timetable.data.model.Course
 import com.topware.timetable.data.parser.TopsoftHtmlParser
@@ -64,7 +63,28 @@ class MainActivity : AppCompatActivity() {
         actualCurrentWeek = TimeUtils.getCurrentWeek(config)
         selectedWeek = actualCurrentWeek
 
-        refreshWeekChips(config.totalWeeks)
+        updateWeekTitle()
+
+        binding.btnMainPrevWeek.setOnClickListener {
+            if (selectedWeek > 1) {
+                selectedWeek--
+                updateWeekTitle()
+                updateWeekView()
+            }
+        }
+
+        binding.btnMainNextWeek.setOnClickListener {
+            val total = repository.getSemesterConfig().totalWeeks
+            if (selectedWeek < total) {
+                selectedWeek++
+                updateWeekTitle()
+                updateWeekView()
+            }
+        }
+
+        binding.tvMainWeekTitle.setOnClickListener {
+            showSelectWeekDialog()
+        }
 
         binding.btnOpenFloating.setOnClickListener {
             startActivity(Intent(this, FloatingScheduleActivity::class.java))
@@ -79,40 +99,43 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun refreshWeekChips(totalWeeks: Int) {
-        binding.chipGroupWeeks.removeAllViews()
-        for (w in 1..totalWeeks) {
-            val chip = Chip(this).apply {
-                text = if (w == actualCurrentWeek) "第 $w 周 (本周)" else "第 $w 周"
-                isCheckable = true
-                isChecked = (w == selectedWeek)
-                setOnClickListener {
-                    selectedWeek = w
-                    updateChipsSelection()
-                    updateWeekView()
-                }
-            }
-            binding.chipGroupWeeks.addView(chip)
+    private fun updateWeekTitle() {
+        val weekLabel = if (selectedWeek == actualCurrentWeek) {
+            "第 $selectedWeek 周 (本周) ▼"
+        } else {
+            "第 $selectedWeek 周 ▼"
         }
+        binding.tvMainWeekTitle.text = weekLabel
     }
 
-    private fun updateChipsSelection() {
-        for (i in 0 until binding.chipGroupWeeks.childCount) {
-            val chip = binding.chipGroupWeeks.getChildAt(i) as? Chip
-            chip?.isChecked = (i + 1 == selectedWeek)
+    private fun showSelectWeekDialog() {
+        val total = repository.getSemesterConfig().totalWeeks
+        val items = Array(total) { i ->
+            val w = i + 1
+            if (w == actualCurrentWeek) "第 $w 周 (本周)" else "第 $w 周"
         }
+        AlertDialog.Builder(this)
+            .setTitle("跳转周次")
+            .setSingleChoiceItems(items, selectedWeek - 1) { dialog, which ->
+                selectedWeek = which + 1
+                updateWeekTitle()
+                updateWeekView()
+                dialog.dismiss()
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun loadData() {
         val config = repository.getSemesterConfig()
         actualCurrentWeek = TimeUtils.getCurrentWeek(config)
+        updateWeekTitle()
         updateWeekView()
     }
 
     private fun updateWeekView() {
-        val count = repository.getCoursesForWeek(selectedWeek).size
-        binding.tvCurrentWeekInfo.text = "当前：第 $selectedWeek 周 · 共 $count 节课程"
-        binding.timetableView.setCourses(repository.getCoursesForWeek(selectedWeek), selectedWeek)
+        val courses = repository.getCoursesForWeek(selectedWeek)
+        binding.timetableView.setCourses(courses, selectedWeek)
     }
 
     private fun showCourseDetail(course: Course) {
@@ -265,7 +288,7 @@ class MainActivity : AppCompatActivity() {
                    右上角菜单 ->「导入本地 HTML 课表文件」，直接选取保存的课表网页。
 
                 2. 网页抓取：
-                   右下角「进入网页更新」，在内置浏览器中登录教务系统，到达课表页面后点击底部「抓取课表」。
+                   右下角「网页同步」，在内置浏览器中登录教务系统，到达课表页面后点击底部「抓取课表」。
 
                 3. Panels / 快捷方式：
                    支持在 Panels 或桌面添加「悬浮课表」快捷方式，随时呼出完整周课表，点击空白处自动关闭。

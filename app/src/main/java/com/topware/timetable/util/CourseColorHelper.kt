@@ -37,7 +37,7 @@ object CourseColorHelper {
     fun getColor(context: Context, index: Int): CourseColor {
         val isDark = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         val palette = if (isDark) DARK_PALETTE else LIGHT_PALETTE
-        val i = Math.abs(index) % palette.size
-        return palette[i]
+        val safeIndex = ((index % palette.size) + palette.size) % palette.size
+        return palette[safeIndex]
     }
 }
