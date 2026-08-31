@@ -34,15 +34,12 @@
                 android:resource="@xml/shortcuts" />
         </activity>
 
-        <!-- 悬浮课表面板 Activity (透明背景卡片，点击空白处自动关闭，适配 Panels / 快捷方式) -->
+        <!-- 悬浮课表面板 Activity -->
         <activity
             android:name=".ui.floating.FloatingScheduleActivity"
             android:theme="@style/Theme.TopSchedule.Floating"
             android:exported="true"
-            android:launchMode="singleInstance"
-            android:excludeFromRecents="true"
-            android:noHistory="true"
-            android:taskAffinity=""
+            android:launchMode="singleTask"
             android:windowSoftInputMode="adjustNothing">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -51,7 +48,7 @@
             </intent-filter>
         </activity>
 
-        <!-- 自定义教务系统网页登录与课表抓取界面 -->
+        <!-- 教务系统网页登录与课表抓取界面 -->
         <activity
             android:name=".ui.webview.WebScheduleActivity"
             android:exported="false"

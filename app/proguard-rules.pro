@@ -1,34 +1,26 @@
-# Keep Custom Views & View Constructors
--keep class com.topware.timetable.ui.view.** { *; }
+# Keep original class and package names without obfuscation
+-dontobfuscate
+
+# Keep all project classes, methods, and constructors
+-keep class com.topware.timetable.** { *; }
+-keepclassmembers class com.topware.timetable.** { *; }
+
+# Keep all custom view constructors used in XML layouts
 -keepclasseswithmembers class * {
     public <init>(android.content.Context);
     public <init>(android.content.Context, android.util.AttributeSet);
     public <init>(android.content.Context, android.util.AttributeSet, int);
 }
 
-# Keep DataBinding Classes
--keep class com.topware.timetable.databinding.** { *; }
-
-# Keep Data Models
--keep class com.topware.timetable.data.model.** { *; }
--keepclassmembers class com.topware.timetable.data.model.** { *; }
-
-# Keep Android Components
--keep class * extends android.app.Activity { *; }
--keep class * extends android.app.Service { *; }
--keep class * extends android.appwidget.AppWidgetProvider { *; }
-
-# Keep JS Bridge
+# Keep JS Bridge interfaces
 -keepclassmembers class * {
     @android.webkit.JavascriptInterface <methods>;
 }
 
-# Keep Gson Serialization
--keepattributes Signature
--keepattributes *Annotation*
--dontwarn sun.misc.**
+# Keep Gson & Jsoup
 -keep class com.google.gson.** { *; }
-
-# Jsoup
 -keep public class org.jsoup.** { public *; }
 -dontwarn org.jsoup.**
+-dontwarn sun.misc.**
+
+-keepattributes Signature,*Annotation*,InnerClasses,EnclosingMethod
