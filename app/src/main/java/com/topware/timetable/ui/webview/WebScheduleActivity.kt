@@ -233,20 +233,13 @@ class WebScheduleActivity : AppCompatActivity() {
                         });
                     }
 
+                    // 居中铺满全屏自适应宽度（不强制 0.25 缩放）
                     var metas = document.getElementsByTagName('meta');
-                    var found = false;
                     for (var i = 0; i < metas.length; i++) {
                         if (metas[i].name === 'viewport') {
-                            metas[i].setAttribute('content', 'width=1280, initial-scale=0.25, maximum-scale=3.0, user-scalable=yes');
-                            found = true;
+                            metas[i].setAttribute('content', 'width=1100, user-scalable=yes');
                             break;
                         }
-                    }
-                    if (!found) {
-                        var meta = document.createElement('meta');
-                        meta.name = 'viewport';
-                        meta.content = 'width=1280, initial-scale=0.25, maximum-scale=3.0, user-scalable=yes';
-                        document.getElementsByTagName('head')[0].appendChild(meta);
                     }
                 } catch(e) {}
             })();
@@ -331,33 +324,30 @@ class WebScheduleActivity : AppCompatActivity() {
     }
 
     private fun extractScheduleHtml() {
-        Toast.makeText(this, "正在抓取课表内容...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "正在深度递归抓取所有框架课表...", Toast.LENGTH_SHORT).show()
         val js = """
             (function() {
-                var fullHtml = document.documentElement.outerHTML;
-                var iframes = document.getElementsByTagName('iframe');
-                for (var i = 0; i < iframes.length; i++) {
+                function collectHtml(win) {
+                    var str = '';
                     try {
-                        var idoc = iframes[i].contentDocument || iframes[i].contentWindow.document;
-                        if (idoc) {
-                            fullHtml += '
-<!-- IFRAME ' + i + ' -->
-' + idoc.documentElement.outerHTML;
+                        if (win && win.document && win.document.documentElement) {
+                            str += win.document.documentElement.outerHTML + '
+';
                         }
                     } catch(e) {}
-                }
-                var frames = document.getElementsByTagName('frame');
-                for (var j = 0; j < frames.length; j++) {
                     try {
-                        var fdoc = frames[j].contentDocument || frames[j].contentWindow.document;
-                        if (fdoc) {
-                            fullHtml += '
-<!-- FRAME ' + j + ' -->
-' + fdoc.documentElement.outerHTML;
+                        if (win && win.frames) {
+                            for (var i = 0; i < win.frames.length; i++) {
+                                try {
+                                    str += collectHtml(win.frames[i]);
+                                } catch(e) {}
+                            }
                         }
                     } catch(e) {}
+                    return str;
                 }
-                ScheduleBridge.processHtml(fullHtml);
+                var allHtml = collectHtml(window);
+                ScheduleBridge.processHtml(allHtml);
             })();
         """.trimIndent()
 
@@ -382,7 +372,11 @@ class WebScheduleActivity : AppCompatActivity() {
                     }
                     .show()
             } else {
-                Toast.makeText(this, "未能检测到课表表格，请进入【学生课表】或【我的课表】页面后再抓取", Toast.LENGTH_LONG).show()
+                AlertDialog.Builder(this)
+                    .setTitle("未提取到课程")
+                    .setMessage("已抓取页面内容（字符数：" + html.length + "），但未能识别到课表表格。\n请确保当前处于【学生课表】或【我的课表】排课页面。")
+                    .setPositiveButton("确定", null)
+                    .show()
             }
         }
     }
