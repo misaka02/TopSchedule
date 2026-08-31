@@ -15,6 +15,7 @@ import com.google.android.material.button.MaterialButton
 import com.topware.timetable.R
 import com.topware.timetable.data.model.Course
 import com.topware.timetable.data.model.CourseStatus
+import com.topware.timetable.data.model.TimeSlot
 import com.topware.timetable.data.repository.ScheduleRepository
 import com.topware.timetable.databinding.ActivityFloatingScheduleBinding
 import com.topware.timetable.databinding.ItemPageTodayBinding
@@ -57,27 +58,23 @@ class FloatingScheduleActivity : AppCompatActivity() {
     }
 
     private fun initViews() {
-        // 点击外部空白背景区域关闭
         binding.rootContainer.setOnClickListener {
             finishWithAnimation()
         }
 
         binding.cardFloating.setOnClickListener {
-            // 拦截点击，防止穿透
         }
 
         binding.btnCloseFloating.setOnClickListener {
             finishWithAnimation()
         }
 
-        // 返回键与手势返回关闭
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 finishWithAnimation()
             }
         })
 
-        // 周次切换
         binding.btnPrevWeek.setOnClickListener {
             if (selectedWeek > 1) {
                 selectedWeek--
@@ -97,12 +94,10 @@ class FloatingScheduleActivity : AppCompatActivity() {
 
         updateWeekTitle()
 
-        // 设置 ViewPager2 与左右滑动适配器
         pagerAdapter = FloatingPagerAdapter()
         binding.viewPagerFloating.adapter = pagerAdapter
 
-        // 默认显示【当日课表】（Page 0）
-        val defaultTab = repository.getFloatingDefaultTab() // 0: Today, 1: Week
+        val defaultTab = repository.getFloatingDefaultTab()
         if (defaultTab == 1) {
             binding.toggleGroupMode.check(R.id.btnTabWeek)
             binding.viewPagerFloating.setCurrentItem(1, false)
@@ -111,7 +106,6 @@ class FloatingScheduleActivity : AppCompatActivity() {
             binding.viewPagerFloating.setCurrentItem(0, false)
         }
 
-        // 按钮点击联动 ViewPager2
         binding.toggleGroupMode.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (isChecked) {
                 if (checkedId == R.id.btnTabWeek) {
@@ -124,72 +118,95 @@ class FloatingScheduleActivity : AppCompatActivity() {
             }
         }
 
-        // 滑动 ViewPager2 联动按钮
         binding.viewPagerFloating.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
-                if (position == 1) {
-                    binding.toggleGroupMode.check(R.id.btnTabWeek)
-                    repository.setFloatingDefaultTab(1)
-                } else {
+                super.onPageSelected(position)
+                if (position == 0) {
                     binding.toggleGroupMode.check(R.id.btnTabToday)
                     repository.setFloatingDefaultTab(0)
+                } else {
+                    binding.toggleGroupMode.check(R.id.btnTabWeek)
+                    repository.setFloatingDefaultTab(1)
                 }
             }
         })
     }
 
     private fun updateWeekTitle() {
-        val weekLabel = if (selectedWeek == actualCurrentWeek) {
+        val weekStr = if (selectedWeek == actualCurrentWeek) {
             "第 $selectedWeek 周 (本周)"
         } else {
             "第 $selectedWeek 周"
         }
-        binding.tvCurrentWeek.text = weekLabel
+        binding.tvCurrentWeek.text = weekStr
     }
 
     private fun loadData() {
         pagerAdapter.notifyDataSetChanged()
     }
 
-    private fun showCourseDetail(course: Course) {
-        val dialog = Dialog(this)
-        val view = layoutInflater.inflate(R.layout.dialog_course_detail, null)
-        dialog.setContentView(view)
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-
-        view.findViewById<TextView>(R.id.dialogCourseName).text = course.name
-        view.findViewById<TextView>(R.id.dialogTime).text = "${course.dayName} ${course.getFormattedPeriodRange()} (${course.getFormattedTimeRange()})"
-        view.findViewById<TextView>(R.id.dialogLocation).text = course.location.ifBlank { "待定" }
-
-        val curTeacher = course.getTeacherForWeek(selectedWeek)
-        view.findViewById<TextView>(R.id.dialogTeacher).text = "本周教师：$curTeacher"
-
-        val allTeachersTv = view.findViewById<TextView>(R.id.dialogAllTeachers)
-        if (course.teacherAssignments.isNotEmpty()) {
-            val sb = StringBuilder()
-            for (item in course.teacherAssignments) {
-                val weekRange = if (item.startWeek == item.endWeek) "第 ${item.startWeek} 周" else "第 ${item.startWeek}-${item.endWeek} 周"
-                sb.append("$weekRange: ${item.teacherName}\n")
-            }
-            allTeachersTv.text = sb.toString().trimEnd()
-        } else {
-            allTeachersTv.text = "全周: ${course.teacher.ifBlank { "待定" }}"
-        }
-
-        view.findViewById<TextView>(R.id.dialogWeeks).text = course.weeksStr.ifBlank { "全周" }
-        view.findViewById<TextView>(R.id.dialogDepartment).text = course.department.ifBlank { "教务处" }
-        view.findViewById<TextView>(R.id.dialogPhone).text = course.phone.ifBlank { "暂无" }
-
-        view.findViewById<MaterialButton>(R.id.dialogBtnClose).setOnClickListener {
-            dialog.dismiss()
-        }
-        dialog.show()
-    }
-
     private fun finishWithAnimation() {
         finish()
-        @Suppress("DEPRECATION")
-        overridePendingTransition(R.anim.floating_enter, R.anim.floating_exit)
+        overridePendingTransition(0, android.R.anim.fade_out)
+    }
+
+    private fun showCourseDetail(course: Course) {
+        val dialog = Dialog(this, R.style.Theme_TopSchedule_Floating)
+        dialog.setContentView(R.layout.dialog_course_detail)
+        dialog.setCanceledOnTouchOutside(true)
+
+        val tvName = dialog.findViewById<TextView>(R.id.dialogCourseName)
+        val tvTime = dialog.findViewById<TextView>(R.id.dialogTime)
+        val tvLoc = dialog.findViewById<TextView>(R.id.dialogLocation)
+        val tvTeacher = dialog.findViewById<TextView>(R.id.dialogTeacher)
+        val tvAllTeachers = dialog.findViewById<TextView>(R.id.dialogAllTeachers)
+        val tvWeeks = dialog.findViewById<TextView>(R.id.dialogWeeks)
+        val tvDept = dialog.findViewById<TextView>(R.id.dialogDepartment)
+        val tvPhone = dialog.findViewById<TextView>(R.id.dialogPhone)
+        val btnClose = dialog.findViewById<MaterialButton>(R.id.dialogBtnClose)
+
+        tvName?.text = course.name
+
+        val startTime = TimeSlot.getStartTime(course.startPeriod)
+        val endTime = TimeSlot.getEndTime(course.endPeriod)
+        tvTime?.text = "${course.dayName} 第 ${course.jieci} 节 ($startTime - $endTime)"
+
+        tvLoc?.text = course.location.ifBlank { "未指定教室" }
+
+        val teacherForThisWeek = course.getTeacherForWeek(selectedWeek)
+        tvTeacher?.text = "本周教师：${teacherForThisWeek.ifBlank { course.teacher.ifBlank { "待定" } }}"
+
+        if (course.teacherAssignments.isNotEmpty()) {
+            val sbTeachers = StringBuilder()
+            for (a in course.teacherAssignments) {
+                sbTeachers.append("${a.startWeek}-${a.endWeek}周：${a.teacherName}\n")
+            }
+            tvAllTeachers?.text = sbTeachers.toString().trimEnd()
+        } else {
+            tvAllTeachers?.text = course.teacher.ifBlank { "待定" }
+        }
+
+        tvWeeks?.text = course.weeksStr.ifBlank { "${course.weeks.firstOrNull() ?: 1}-${course.weeks.lastOrNull() ?: 16}周" }
+
+        if (course.department.isNotBlank()) {
+            tvDept?.visibility = View.VISIBLE
+            tvDept?.text = course.department
+        } else {
+            tvDept?.visibility = View.GONE
+        }
+
+        if (course.phone.isNotBlank()) {
+            tvPhone?.visibility = View.VISIBLE
+            tvPhone?.text = course.phone
+        } else {
+            tvPhone?.visibility = View.GONE
+        }
+
+        btnClose?.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
     }
 
     inner class FloatingPagerAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
