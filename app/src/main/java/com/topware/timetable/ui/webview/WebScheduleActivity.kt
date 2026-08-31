@@ -111,7 +111,12 @@ class WebScheduleActivity : AppCompatActivity() {
             applyUserAgentAndScale()
             val modeName = if (isDesktopUa) "电脑桌面版 (PC)" else "手机移动版 (Mobile)"
             Toast.makeText(this, "已切换为 $modeName", Toast.LENGTH_SHORT).show()
-            binding.webView.reload()
+            val curUrl = binding.webView.url ?: binding.etUrlInput.text.toString().trim()
+            if (curUrl.isNotBlank()) {
+                loadUrl(curUrl)
+            } else {
+                binding.webView.reload()
+            }
         }
 
         binding.btnSaveBookmark.setOnClickListener {
@@ -151,6 +156,21 @@ class WebScheduleActivity : AppCompatActivity() {
         }
     }
 
+    private fun getDesktopHeaders(): Map<String, String> {
+        if (!isDesktopUa) return emptyMap()
+        return mapOf(
+            "User-Agent" to DESKTOP_UA,
+            "Sec-CH-UA" to "\"Chromium\";v=\"128\", \"Not;A=Brand\";v=\"24\", \"Google Chrome\";v=\"128\"",
+            "Sec-CH-UA-Mobile" to "?0",
+            "Sec-CH-UA-Platform" to "\"Windows\"",
+            "Sec-CH-UA-Platform-Version" to "\"15.0.0\"",
+            "Sec-CH-UA-Model" to "\"\"",
+            "Upgrade-Insecure-Requests" to "1",
+            "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "Accept-Language" to "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7"
+        )
+    }
+
     private fun applyUserAgentAndScale() {
         val settings = binding.webView.settings
         if (isDesktopUa) {
@@ -171,25 +191,64 @@ class WebScheduleActivity : AppCompatActivity() {
         updateUaButton()
     }
 
-    private fun injectDesktopViewport() {
+    private fun injectDesktopEnvironment() {
         if (!isDesktopUa) return
         val js = """
             (function() {
-                var metas = document.getElementsByTagName('meta');
-                var found = false;
-                for (var i = 0; i < metas.length; i++) {
-                    if (metas[i].name === 'viewport') {
-                        metas[i].setAttribute('content', 'width=1280, initial-scale=0.25, maximum-scale=3.0, user-scalable=yes');
-                        found = true;
-                        break;
+                try {
+                    Object.defineProperty(navigator, 'userAgent', {
+                        get: function() { return '$DESKTOP_UA'; },
+                        configurable: true
+                    });
+                    Object.defineProperty(navigator, 'appVersion', {
+                        get: function() { return '5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'; },
+                        configurable: true
+                    });
+                    Object.defineProperty(navigator, 'platform', {
+                        get: function() { return 'Win32'; },
+                        configurable: true
+                    });
+                    Object.defineProperty(navigator, 'vendor', {
+                        get: function() { return 'Google Inc.'; },
+                        configurable: true
+                    });
+                    Object.defineProperty(navigator, 'maxTouchPoints', {
+                        get: function() { return 0; },
+                        configurable: true
+                    });
+                    if (navigator.userAgentData) {
+                        Object.defineProperty(navigator, 'userAgentData', {
+                            get: function() {
+                                return {
+                                    brands: [
+                                        { brand: 'Chromium', version: '128' },
+                                        { brand: 'Google Chrome', version: '128' },
+                                        { brand: 'Not;A=Brand', version: '24' }
+                                    ],
+                                    mobile: false,
+                                    platform: 'Windows'
+                                };
+                            },
+                            configurable: true
+                        });
                     }
-                }
-                if (!found) {
-                    var meta = document.createElement('meta');
-                    meta.name = 'viewport';
-                    meta.content = 'width=1280, initial-scale=0.25, maximum-scale=3.0, user-scalable=yes';
-                    document.getElementsByTagName('head')[0].appendChild(meta);
-                }
+
+                    var metas = document.getElementsByTagName('meta');
+                    var found = false;
+                    for (var i = 0; i < metas.length; i++) {
+                        if (metas[i].name === 'viewport') {
+                            metas[i].setAttribute('content', 'width=1280, initial-scale=0.25, maximum-scale=3.0, user-scalable=yes');
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        var meta = document.createElement('meta');
+                        meta.name = 'viewport';
+                        meta.content = 'width=1280, initial-scale=0.25, maximum-scale=3.0, user-scalable=yes';
+                        document.getElementsByTagName('head')[0].appendChild(meta);
+                    }
+                } catch(e) {}
             })();
         """.trimIndent()
         binding.webView.evaluateJavascript(js, null)
@@ -200,7 +259,12 @@ class WebScheduleActivity : AppCompatActivity() {
         if (!formatted.startsWith("http://") && !formatted.startsWith("https://")) {
             formatted = "https://$formatted"
         }
-        binding.webView.loadUrl(formatted)
+        val headers = getDesktopHeaders()
+        if (headers.isNotEmpty()) {
+            binding.webView.loadUrl(formatted, headers)
+        } else {
+            binding.webView.loadUrl(formatted)
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -222,9 +286,12 @@ class WebScheduleActivity : AppCompatActivity() {
         binding.webView.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
                 binding.progressBar.progress = newProgress
+                if (newProgress >= 20) {
+                    injectDesktopEnvironment()
+                }
                 if (newProgress == 100) {
                     binding.progressBar.visibility = android.view.View.GONE
-                    injectDesktopViewport()
+                    injectDesktopEnvironment()
                 } else {
                     binding.progressBar.visibility = android.view.View.VISIBLE
                 }
@@ -233,17 +300,25 @@ class WebScheduleActivity : AppCompatActivity() {
 
         binding.webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                val url = request?.url?.toString() ?: return false
+                if (url.startsWith("http://") || url.startsWith("https://")) {
+                    val headers = getDesktopHeaders()
+                    if (headers.isNotEmpty() && request.requestHeaders["Sec-CH-UA-Mobile"] != "?0") {
+                        view?.loadUrl(url, headers)
+                        return true
+                    }
+                }
                 return false
             }
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
-                injectDesktopViewport()
+                injectDesktopEnvironment()
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
-                injectDesktopViewport()
+                injectDesktopEnvironment()
                 url?.let {
                     if (!binding.etUrlInput.hasFocus()) {
                         binding.etUrlInput.setText(it)
@@ -265,7 +340,9 @@ class WebScheduleActivity : AppCompatActivity() {
                     try {
                         var idoc = iframes[i].contentDocument || iframes[i].contentWindow.document;
                         if (idoc) {
-                            fullHtml += '\n<!-- IFRAME ' + i + ' -->\n' + idoc.documentElement.outerHTML;
+                            fullHtml += '
+<!-- IFRAME ' + i + ' -->
+' + idoc.documentElement.outerHTML;
                         }
                     } catch(e) {}
                 }
@@ -274,7 +351,9 @@ class WebScheduleActivity : AppCompatActivity() {
                     try {
                         var fdoc = frames[j].contentDocument || frames[j].contentWindow.document;
                         if (fdoc) {
-                            fullHtml += '\n<!-- FRAME ' + j + ' -->\n' + fdoc.documentElement.outerHTML;
+                            fullHtml += '
+<!-- FRAME ' + j + ' -->
+' + fdoc.documentElement.outerHTML;
                         }
                     } catch(e) {}
                 }
