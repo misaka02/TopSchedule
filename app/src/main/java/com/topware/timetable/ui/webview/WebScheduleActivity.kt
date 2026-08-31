@@ -2,6 +2,7 @@ package com.topware.timetable.ui.webview
 
 import android.annotation.SuppressLint
 import android.app.AlertDialog
+import android.graphics.Bitmap
 import android.os.Bundle
 import android.view.inputmethod.EditorInfo
 import android.webkit.JavascriptInterface
@@ -64,10 +65,9 @@ class WebScheduleActivity : AppCompatActivity() {
 
             repository.saveCredentials(user, pwd, remember)
 
-            // 通过 JavaScript 将账号密码填入网页表单
             val js = """
                 (function() {
-                    var userInputs = document.querySelectorAll('input[type="text"], input[name*="user"], input[name*="account"], input[id*="user"], input[id*="account"]');
+                    var userInputs = document.querySelectorAll('input[type="text"], input[name*="user"], input[name*="account"], input[name*="name"], input[id*="user"], input[id*="account"]');
                     for (var i = 0; i < userInputs.length; i++) {
                         userInputs[i].value = '$user';
                         userInputs[i].dispatchEvent(new Event('input', { bubbles: true }));
@@ -82,7 +82,7 @@ class WebScheduleActivity : AppCompatActivity() {
                 })();
             """.trimIndent()
             binding.webView.evaluateJavascript(js, null)
-            Toast.makeText(this, "已尝试自动填入账号密码", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "已自动填入账号密码", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -108,8 +108,8 @@ class WebScheduleActivity : AppCompatActivity() {
         binding.btnToggleUa.setOnClickListener {
             isDesktopUa = !isDesktopUa
             repository.setDesktopUaEnabled(isDesktopUa)
-            applyUserAgent()
-            val modeName = if (isDesktopUa) "电脑版 (PC)" else "手机版 (Mobile)"
+            applyUserAgentAndScale()
+            val modeName = if (isDesktopUa) "电脑桌面版 (PC)" else "手机移动版 (Mobile)"
             Toast.makeText(this, "已切换为 $modeName", Toast.LENGTH_SHORT).show()
             binding.webView.reload()
         }
@@ -151,18 +151,48 @@ class WebScheduleActivity : AppCompatActivity() {
         }
     }
 
-    private fun applyUserAgent() {
+    private fun applyUserAgentAndScale() {
         val settings = binding.webView.settings
         if (isDesktopUa) {
             settings.userAgentString = DESKTOP_UA
             settings.useWideViewPort = true
             settings.loadWithOverviewMode = true
+            settings.setSupportZoom(true)
+            settings.builtInZoomControls = true
+            settings.displayZoomControls = false
         } else {
             settings.userAgentString = defaultMobileUa.ifEmpty { null }
             settings.useWideViewPort = true
             settings.loadWithOverviewMode = false
+            settings.setSupportZoom(true)
+            settings.builtInZoomControls = true
+            settings.displayZoomControls = false
         }
         updateUaButton()
+    }
+
+    private fun injectDesktopViewport() {
+        if (!isDesktopUa) return
+        val js = """
+            (function() {
+                var metas = document.getElementsByTagName('meta');
+                var found = false;
+                for (var i = 0; i < metas.length; i++) {
+                    if (metas[i].name === 'viewport') {
+                        metas[i].setAttribute('content', 'width=1280, initial-scale=0.25, maximum-scale=3.0, user-scalable=yes');
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    var meta = document.createElement('meta');
+                    meta.name = 'viewport';
+                    meta.content = 'width=1280, initial-scale=0.25, maximum-scale=3.0, user-scalable=yes';
+                    document.getElementsByTagName('head')[0].appendChild(meta);
+                }
+            })();
+        """.trimIndent()
+        binding.webView.evaluateJavascript(js, null)
     }
 
     private fun loadUrl(rawUrl: String) {
@@ -180,12 +210,12 @@ class WebScheduleActivity : AppCompatActivity() {
 
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
-        settings.builtInZoomControls = true
-        settings.displayZoomControls = false
-        settings.setSupportZoom(true)
+        settings.databaseEnabled = true
+        settings.allowContentAccess = true
+        settings.allowFileAccess = true
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
 
-        applyUserAgent()
+        applyUserAgentAndScale()
 
         binding.webView.addJavascriptInterface(ScheduleJsBridge(this), "ScheduleBridge")
 
@@ -194,6 +224,7 @@ class WebScheduleActivity : AppCompatActivity() {
                 binding.progressBar.progress = newProgress
                 if (newProgress == 100) {
                     binding.progressBar.visibility = android.view.View.GONE
+                    injectDesktopViewport()
                 } else {
                     binding.progressBar.visibility = android.view.View.VISIBLE
                 }
@@ -205,8 +236,14 @@ class WebScheduleActivity : AppCompatActivity() {
                 return false
             }
 
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                injectDesktopViewport()
+            }
+
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
+                injectDesktopViewport()
                 url?.let {
                     if (!binding.etUrlInput.hasFocus()) {
                         binding.etUrlInput.setText(it)
@@ -232,6 +269,15 @@ class WebScheduleActivity : AppCompatActivity() {
                         }
                     } catch(e) {}
                 }
+                var frames = document.getElementsByTagName('frame');
+                for (var j = 0; j < frames.length; j++) {
+                    try {
+                        var fdoc = frames[j].contentDocument || frames[j].contentWindow.document;
+                        if (fdoc) {
+                            fullHtml += '\n<!-- FRAME ' + j + ' -->\n' + fdoc.documentElement.outerHTML;
+                        }
+                    } catch(e) {}
+                }
                 ScheduleBridge.processHtml(fullHtml);
             })();
         """.trimIndent()
@@ -251,10 +297,10 @@ class WebScheduleActivity : AppCompatActivity() {
 
                 AlertDialog.Builder(this)
                     .setTitle("课表抓取成功")
-                    .setMessage("成功解析到 ${courses.size} 门次课程。\n主课表与悬浮窗已全部同步更新。")
-                    .setPositiveButton("查看", { _, _ ->
+                    .setMessage("成功解析到 " + courses.size + " 门次课程。\n主课表与悬浮窗已全部同步更新。")
+                    .setPositiveButton("查看") { _, _ ->
                         finish()
-                    })
+                    }
                     .show()
             } else {
                 Toast.makeText(this, "未能检测到课表表格，请进入【学生课表】或【我的课表】页面后再抓取", Toast.LENGTH_LONG).show()
