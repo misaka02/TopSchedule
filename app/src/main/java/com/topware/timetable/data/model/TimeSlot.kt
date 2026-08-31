@@ -29,5 +29,15 @@ data class TimeSlot(
         fun getEndTime(period: Int): String {
             return DEFAULT_PERIODS.firstOrNull { it.period == period }?.endTime ?: "20:55"
         }
+
+        fun parseTimeToMinutes(timeStr: String): Int {
+            val parts = timeStr.trim().split(":")
+            if (parts.size >= 2) {
+                val h = parts[0].toIntOrNull() ?: 0
+                val m = parts[1].toIntOrNull() ?: 0
+                return h * 60 + m
+            }
+            return 0
+        }
     }
 }

@@ -13,14 +13,14 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:layout_marginHorizontal="20dp"
+        android:layout_marginHorizontal="18dp"
         android:layout_marginVertical="32dp"
         android:clickable="true"
         android:focusable="true"
         app:cardCornerRadius="24dp"
-        app:cardElevation="12dp"
+        app:cardElevation="16dp"
         app:strokeWidth="1dp"
-        app:strokeColor="#E0E0E0"
+        app:strokeColor="#E5E7EB"
         app:cardBackgroundColor="@color/surface">
 
         <LinearLayout
@@ -29,6 +29,7 @@
             android:orientation="vertical"
             android:padding="16dp">
 
+            <!-- Header -->
             <RelativeLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content">
@@ -46,35 +47,38 @@
                         android:layout_height="wrap_content"
                         android:text="悬浮课表"
                         android:textColor="@color/on_surface"
-                        android:textSize="17sp"
+                        android:textSize="18sp"
                         android:textStyle="bold" />
 
                     <TextView
                         android:id="@+id/tvFloatingSubtitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
                         android:text="第 1 周 · 星期一"
                         android:textColor="@color/on_surface_variant"
                         android:textSize="13sp" />
                 </LinearLayout>
 
-                <com.google.android.material.button.MaterialButton
+                <ImageButton
                     android:id="@+id/btnCloseFloating"
-                    style="@style/Widget.Material3.Button.IconButton"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
                     android:layout_alignParentEnd="true"
                     android:layout_centerVertical="true"
-                    app:icon="@android:drawable/ic_menu_close_clear_cancel"
-                    app:iconTint="@color/on_surface_variant" />
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@drawable/ic_close"
+                    app:tint="@color/on_surface_variant"
+                    android:contentDescription="关闭" />
             </RelativeLayout>
 
+            <!-- Mode Switcher -->
             <com.google.android.material.button.MaterialButtonToggleGroup
                 android:id="@+id/toggleGroupMode"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:layout_marginBottom="8dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="10dp"
                 app:singleSelection="true"
                 app:selectionRequired="true">
 
@@ -82,49 +86,51 @@
                     android:id="@+id/btnTabToday"
                     style="@style/Widget.Material3.Button.OutlinedButton"
                     android:layout_width="0dp"
-                    android:layout_height="38dp"
+                    android:layout_height="40dp"
                     android:layout_weight="1"
                     android:text="今日聚焦"
-                    android:textSize="13sp" />
+                    android:textSize="13.5sp" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnTabWeek"
                     style="@style/Widget.Material3.Button.OutlinedButton"
                     android:layout_width="0dp"
-                    android:layout_height="38dp"
+                    android:layout_height="40dp"
                     android:layout_weight="1"
                     android:text="本周总览"
-                    android:textSize="13sp" />
+                    android:textSize="13.5sp" />
             </com.google.android.material.button.MaterialButtonToggleGroup>
 
+            <!-- Today Container -->
             <FrameLayout
                 android:id="@+id/containerToday"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minHeight="180dp">
+                android:minHeight="200dp">
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/rvTodayCourses"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:maxHeight="360dp"
+                    android:maxHeight="380dp"
                     android:nestedScrollingEnabled="true" />
 
                 <TextView
                     android:id="@+id/tvEmptyToday"
                     android:layout_width="match_parent"
-                    android:layout_height="140dp"
+                    android:layout_height="160dp"
                     android:gravity="center"
-                    android:text="今日无课程安排 ☕"
+                    android:text="今日暂无课程安排"
                     android:textColor="@color/on_surface_variant"
                     android:textSize="14sp"
                     android:visibility="gone" />
             </FrameLayout>
 
+            <!-- Week Container -->
             <FrameLayout
                 android:id="@+id/containerWeek"
                 android:layout_width="match_parent"
-                android:layout_height="320dp"
+                android:layout_height="340dp"
                 android:visibility="gone">
 
                 <androidx.core.widget.NestedScrollView
@@ -143,10 +149,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center"
-                android:paddingTop="10dp"
-                android:text="💡 点击卡片外任意空白区域即可快速退隐"
-                android:textColor="#9E9E9E"
-                android:textSize="11sp" />
+                android:paddingTop="12dp"
+                android:text="点击外部空白区域或按返回键即可关闭"
+                android:textColor="#9CA3AF"
+                android:textSize="11.5sp" />
 
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>

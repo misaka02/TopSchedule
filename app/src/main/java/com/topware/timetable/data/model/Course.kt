@@ -1,6 +1,14 @@
 package com.topware.timetable.data.model
 
 import java.io.Serializable
+import java.util.Calendar
+
+enum class CourseStatus {
+    ONGOING,       // 正在进行
+    NEXT_UPCOMING, // 下一节即将开始
+    FUTURE,        // 今日后续课程
+    FINISHED       // 今日已结束
+}
 
 data class Course(
     val id: String = java.util.UUID.randomUUID().toString(),
@@ -24,9 +32,43 @@ data class Course(
         return weeks.isEmpty() || weeks.contains(weekNumber)
     }
 
-    fun getFormattedTime(): String {
-        val start = TimeSlot.getStartTime(startPeriod)
-        val end = TimeSlot.getEndTime(endPeriod)
-        return "$start - $end"
+    fun getStartTime(): String {
+        return TimeSlot.getStartTime(startPeriod)
+    }
+
+    fun getEndTime(): String {
+        return TimeSlot.getEndTime(endPeriod)
+    }
+
+    fun getFormattedTimeRange(): String {
+        return "${getStartTime()} - ${getEndTime()}"
+    }
+
+    fun getFormattedPeriodRange(): String {
+        return if (startPeriod == endPeriod) "第 $startPeriod 节" else "第 $startPeriod-$endPeriod 节"
+    }
+
+    /**
+     * 计算当前课程在今日此时的状态
+     */
+    fun calculateStatus(cal: Calendar = Calendar.getInstance()): CourseStatus {
+        val currentMinutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+        val startMinutes = TimeSlot.parseTimeToMinutes(getStartTime())
+        val endMinutes = TimeSlot.parseTimeToMinutes(getEndTime())
+
+        return when {
+            currentMinutes in startMinutes..endMinutes -> CourseStatus.ONGOING
+            currentMinutes < startMinutes -> CourseStatus.FUTURE // Later determined if it's the NEXT_UPCOMING
+            else -> CourseStatus.FINISHED
+        }
+    }
+
+    /**
+     * 获取距课程开始的剩余分钟数 (若已开始或已结束则返回负数或0)
+     */
+    fun getMinutesUntilStart(cal: Calendar = Calendar.getInstance()): Int {
+        val currentMinutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+        val startMinutes = TimeSlot.parseTimeToMinutes(getStartTime())
+        return startMinutes - currentMinutes
     }
 }

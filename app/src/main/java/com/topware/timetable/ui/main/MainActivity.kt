@@ -8,11 +8,14 @@ import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.EditText
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.Chip
+import com.topware.timetable.R
 import com.topware.timetable.data.model.Course
 import com.topware.timetable.data.parser.TopsoftHtmlParser
 import com.topware.timetable.data.repository.ScheduleRepository
@@ -34,7 +37,6 @@ class MainActivity : AppCompatActivity() {
     private var currentWeek: Int = 1
     private var selectedWeek: Int = 1
 
-    // 系统文件选择器：支持直接选择手机中保存的 .html / .htm 课表网页文件
     private val pickHtmlLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { importHtmlFromUri(it) }
     }
@@ -68,7 +70,7 @@ class MainActivity : AppCompatActivity() {
                 isCheckable = true
                 id = w
                 if (w == currentWeek) {
-                    text = "第 $w 周(本周)"
+                    text = "第 $w 周 (本周)"
                 }
                 setOnClickListener {
                     selectedWeek = w
@@ -99,31 +101,37 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateWeekView() {
-        binding.tvCurrentWeekInfo.text = "当前查看：第 $selectedWeek 周 · 共 ${repository.getCoursesForWeek(selectedWeek).size} 节课"
+        val count = repository.getCoursesForWeek(selectedWeek).size
+        binding.tvCurrentWeekInfo.text = "当前：第 $selectedWeek 周 · 共 $count 节课程"
         binding.timetableView.setCourses(repository.getCoursesForWeek(selectedWeek))
     }
 
     private fun showCourseDetail(course: Course) {
-        AlertDialog.Builder(this)
-            .setTitle(course.name)
-            .setMessage("""
-                ⏰ 时间：${course.dayName} 第${course.jieci}节 (${course.getFormattedTime()})
-                📍 地点：${course.location.ifBlank { "待定" }}
-                👨‍🏫 教师：${course.teacher.ifBlank { "待定" }}
-                📅 周次：${course.weeksStr.ifBlank { "全周" }}
-                🏛️ 院系：${course.department.ifBlank { "教务处" }}
-                📞 电话：${course.phone.ifBlank { "暂无" }}
-            """.trimIndent())
-            .setPositiveButton("知道了", null)
-            .show()
+        val dialog = android.app.Dialog(this)
+        val view = layoutInflater.inflate(R.layout.dialog_course_detail, null)
+        dialog.setContentView(view)
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        view.findViewById<TextView>(R.id.dialogCourseName).text = course.name
+        view.findViewById<TextView>(R.id.dialogTime).text = "${course.dayName} ${course.getFormattedPeriodRange()} (${course.getFormattedTimeRange()})"
+        view.findViewById<TextView>(R.id.dialogLocation).text = course.location.ifBlank { "待定" }
+        view.findViewById<TextView>(R.id.dialogTeacher).text = course.teacher.ifBlank { "待定" }
+        view.findViewById<TextView>(R.id.dialogWeeks).text = course.weeksStr.ifBlank { "全周" }
+        view.findViewById<TextView>(R.id.dialogDepartment).text = course.department.ifBlank { "教务处" }
+        view.findViewById<TextView>(R.id.dialogPhone).text = course.phone.ifBlank { "暂无" }
+
+        view.findViewById<MaterialButton>(R.id.dialogBtnClose).setOnClickListener {
+            dialog.dismiss()
+        }
+        dialog.show()
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
-        menu?.add(0, 1, 0, "📂 导入本地 HTML 课表文件")
-        menu?.add(0, 2, 0, "🌐 设置默认教务网址")
-        menu?.add(0, 3, 0, "📅 设置开学时间")
-        menu?.add(0, 4, 0, "🔄 恢复默认示例课表")
-        menu?.add(0, 5, 0, "💡 使用说明与Panels配置")
+        menu?.add(0, 1, 0, "导入本地 HTML 课表文件")
+        menu?.add(0, 2, 0, "设置默认教务网址")
+        menu?.add(0, 3, 0, "设置开学日期")
+        menu?.add(0, 4, 0, "恢复默认示例课表")
+        menu?.add(0, 5, 0, "使用指引与快捷方式")
         return true
     }
 
@@ -147,7 +155,6 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             var content = ""
             try {
-                // 1. 读取文件流（优先 UTF-8）
                 content = contentResolver.openInputStream(uri)?.use { stream ->
                     BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).readText()
                 } ?: ""
@@ -156,8 +163,6 @@ class MainActivity : AppCompatActivity() {
             }
 
             var courses = TopsoftHtmlParser.parse(content)
-
-            // 如果 UTF-8 未解析出结果，尝试 GBK
             if (courses.isEmpty()) {
                 try {
                     content = contentResolver.openInputStream(uri)?.use { stream ->
@@ -174,13 +179,13 @@ class MainActivity : AppCompatActivity() {
                     repository.saveCourses(courses)
                     loadData()
                     AlertDialog.Builder(this@MainActivity)
-                        .setTitle("🎉 文件导入成功")
-                        .setMessage("已成功从本地 HTML 文件中解析并导入 ${courses.size} 门次课程！\n主课表与悬浮窗已全部同步更新。")
-                        .setPositiveButton("太棒了", null)
+                        .setTitle("文件导入成功")
+                        .setMessage("已成功从本地 HTML 文件中解析并导入 ${courses.size} 门次课程。\n主课表与悬浮窗已全部同步更新。")
+                        .setPositiveButton("完成", null)
                         .show()
                 } else {
                     AlertDialog.Builder(this@MainActivity)
-                        .setTitle("⚠️ 解析失败")
+                        .setTitle("解析未成功")
                         .setMessage("未能从所选 HTML 文件中提取到有效课表数据。请确保选中的文件是教务系统【学生课表】导出的完整网页。")
                         .setPositiveButton("确定", null)
                         .show()
@@ -220,7 +225,7 @@ class MainActivity : AppCompatActivity() {
                 repository.saveSemesterConfig(newConfig)
                 initViews()
                 loadData()
-                Toast.makeText(this, "开学时间已更新", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "开学日期已更新", Toast.LENGTH_SHORT).show()
             },
             cal.get(Calendar.YEAR),
             cal.get(Calendar.MONTH),
@@ -230,18 +235,18 @@ class MainActivity : AppCompatActivity() {
 
     private fun showHelpDialog() {
         AlertDialog.Builder(this)
-            .setTitle("💡 悬浮课表与使用指引")
+            .setTitle("使用指引")
             .setMessage("""
-                1. 【本地 HTML 文件直接导入】：
-                   点击右上角菜单 ->「📂 导入本地 HTML 课表文件」，直接在手机文件管理器中选择保存好的课表网页文件即可极速导入！
+                1. 本地 HTML 文件导入：
+                   点击右上角菜单 ->「导入本地 HTML 课表文件」，在手机文件管理器中选取保存好的课表网页文件即可极速导入。
 
-                2. 【网页一键同步】：
-                   点击右下角「进入网页更新」，输入教务登录网址（支持点击星星设为默认），登录进入课表页后点击底部一键抓取即可！
+                2. 网页一键抓取：
+                   点击右下角「进入网页更新」，输入教务系统网址并登录。进入课表页面后点击底部「一键智能抓取」即可同步。
 
-                3. 【Panels / 边缘手势调用】：
-                   在 Panels 侧边栏或其他手势应用中，添加快捷方式 (Shortcut) 并选择「悬浮课表」，即可随时随地在任何界面上方悬浮唤起课表，点击外部空白处瞬间关闭！
+                3. Panels / 快捷方式调用：
+                   在 Panels 侧边栏或其他手势应用中，添加快捷方式 (Shortcut) 并选择「悬浮课表」，即可随时随地在任何界面上方悬浮唤起课表，点击外部空白处或按返回键瞬间关闭。
             """.trimIndent())
-            .setPositiveButton("学会了", null)
+            .setPositiveButton("确定", null)
             .show()
     }
 }

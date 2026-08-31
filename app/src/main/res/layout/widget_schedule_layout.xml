@@ -48,7 +48,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="end"
-        android:text="点击打开悬浮课表 ▸"
+        android:text="打开悬浮课表"
         android:textColor="@color/primary"
         android:textSize="11sp" />
 </LinearLayout>

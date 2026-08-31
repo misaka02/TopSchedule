@@ -3,7 +3,6 @@ package com.topware.timetable.ui.webview
 import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.os.Bundle
-import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
@@ -13,6 +12,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.topware.timetable.R
 import com.topware.timetable.data.parser.TopsoftHtmlParser
 import com.topware.timetable.data.repository.ScheduleRepository
 import com.topware.timetable.databinding.ActivityWebScheduleBinding
@@ -35,7 +35,7 @@ class WebScheduleActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         repository = ScheduleRepository.getInstance(this)
-        isDesktopUa = repository.isDesktopUaEnabled() // 默认 true (桌面端)
+        isDesktopUa = repository.isDesktopUaEnabled()
 
         setupListeners()
         setupWebView()
@@ -65,7 +65,7 @@ class WebScheduleActivity : AppCompatActivity() {
             if (url.isNotEmpty()) {
                 loadUrl(url)
             } else {
-                Toast.makeText(this, "请输入教务网址", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "请输入教务系统网址", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -78,13 +78,12 @@ class WebScheduleActivity : AppCompatActivity() {
             }
         }
 
-        // UA Switch Toggle
         binding.btnToggleUa.setOnClickListener {
             isDesktopUa = !isDesktopUa
             repository.setDesktopUaEnabled(isDesktopUa)
             applyUserAgent()
-            val modeName = if (isDesktopUa) "桌面版 (PC)" else "手机版 (Mobile)"
-            Toast.makeText(this, "已切换为 $modeName，正在刷新页面...", Toast.LENGTH_SHORT).show()
+            val modeName = if (isDesktopUa) "电脑版 (PC)" else "手机版 (Mobile)"
+            Toast.makeText(this, "已切换为 $modeName，正在重新加载...", Toast.LENGTH_SHORT).show()
             binding.webView.reload()
         }
 
@@ -95,11 +94,11 @@ class WebScheduleActivity : AppCompatActivity() {
                 if (saved == currentUrl) {
                     repository.saveJwUrl("")
                     updateBookmarkIcon(false)
-                    Toast.makeText(this, "已取消默认教务地址", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "已取消默认地址", Toast.LENGTH_SHORT).show()
                 } else {
                     repository.saveJwUrl(currentUrl)
                     updateBookmarkIcon(true)
-                    Toast.makeText(this, "已保存此网址为默认教务地址 ⭐\n下次进入将自动打开！", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "已设为默认教务地址，下次进入将自动打开", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -111,17 +110,17 @@ class WebScheduleActivity : AppCompatActivity() {
 
     private fun updateBookmarkIcon(isSaved: Boolean) {
         if (isSaved) {
-            binding.btnSaveBookmark.setImageResource(android.R.drawable.btn_star_big_on)
+            binding.btnSaveBookmark.setImageResource(R.drawable.ic_star_filled)
         } else {
-            binding.btnSaveBookmark.setImageResource(android.R.drawable.btn_star_big_off)
+            binding.btnSaveBookmark.setImageResource(R.drawable.ic_star_outline)
         }
     }
 
     private fun updateUaButton() {
         if (isDesktopUa) {
-            binding.btnToggleUa.text = "🖥️ 电脑版"
+            binding.btnToggleUa.text = "电脑版"
         } else {
-            binding.btnToggleUa.text = "📱 手机版"
+            binding.btnToggleUa.text = "手机版"
         }
     }
 
@@ -167,9 +166,9 @@ class WebScheduleActivity : AppCompatActivity() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
                 binding.progressBar.progress = newProgress
                 if (newProgress == 100) {
-                    binding.progressBar.visibility = View.GONE
+                    binding.progressBar.visibility = android.view.View.GONE
                 } else {
-                    binding.progressBar.visibility = View.VISIBLE
+                    binding.progressBar.visibility = android.view.View.VISIBLE
                 }
             }
         }
@@ -193,7 +192,7 @@ class WebScheduleActivity : AppCompatActivity() {
     }
 
     private fun extractScheduleHtml() {
-        Toast.makeText(this, "正在抓取当前页面及所有子框架课表内容...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "正在抓取页面课表内容...", Toast.LENGTH_SHORT).show()
         val js = """
             (function() {
                 var fullHtml = document.documentElement.outerHTML;
@@ -224,14 +223,14 @@ class WebScheduleActivity : AppCompatActivity() {
                 }
 
                 AlertDialog.Builder(this)
-                    .setTitle("🎉 课表抓取成功")
-                    .setMessage("成功解析到 ${courses.size} 门次课程！\n已自动同步更新至您的主课表及悬浮窗。")
-                    .setPositiveButton("立即查看") { _, _ ->
+                    .setTitle("课表抓取成功")
+                    .setMessage("成功解析到 ${courses.size} 门次课程。\n主课表与悬浮窗已全部同步更新。")
+                    .setPositiveButton("查看", { _, _ ->
                         finish()
-                    }
+                    })
                     .show()
             } else {
-                Toast.makeText(this, "未能检测到课表表格，请在教务系统中进入【学生课表】或【我的课表】页面后再点击抓取！", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "未能检测到课表表格，请进入【学生课表】或【我的课表】页面后再抓取", Toast.LENGTH_LONG).show()
             }
         }
     }

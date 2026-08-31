@@ -22,36 +22,37 @@ class TimetableView @JvmOverloads constructor(
     private var onCourseClickListener: ((Course) -> Unit)? = null
 
     private val density = resources.displayMetrics.density
-    private val timeColWidth = 42 * density
+    private val timeColWidth = 46 * density
     private val headerHeight = 36 * density
-    private val rowHeight = 60 * density
+    private val rowHeight = 64 * density
     private val totalPeriods = 13
     private val totalDays = 7
 
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#E0E0E0")
+        color = Color.parseColor("#EEF0F2")
         strokeWidth = 1 * density
     }
 
     private val headerBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#F5F5F5")
+        color = Color.parseColor("#F8F9FA")
     }
 
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#424242")
+        color = Color.parseColor("#374151")
         textSize = 12 * density
         textAlign = Paint.Align.CENTER
     }
 
     private val periodTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#757575")
-        textSize = 11 * density
+        color = Color.parseColor("#4B5563")
+        textSize = 11.5f * density
+        isFakeBoldText = true
         textAlign = Paint.Align.CENTER
     }
 
     private val timeSubTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#9E9E9E")
-        textSize = 9 * density
+        color = Color.parseColor("#9CA3AF")
+        textSize = 9.5f * density
         textAlign = Paint.Align.CENTER
     }
 
@@ -61,7 +62,7 @@ class TimetableView @JvmOverloads constructor(
 
     private val courseCardBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 1 * density
+        strokeWidth = 1.2f * density
     }
 
     private val courseTitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -71,9 +72,16 @@ class TimetableView @JvmOverloads constructor(
         textAlign = Paint.Align.LEFT
     }
 
-    private val courseDtlPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#616161")
-        textSize = 10 * density
+    private val courseLocPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#1F2937")
+        textSize = 10f * density
+        isFakeBoldText = true
+        textAlign = Paint.Align.LEFT
+    }
+
+    private val courseTimePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#6B7280")
+        textSize = 9f * density
         textAlign = Paint.Align.LEFT
     }
 
@@ -101,28 +109,31 @@ class TimetableView @JvmOverloads constructor(
         val w = width.toFloat()
         val dayColWidth = (w - timeColWidth) / totalDays
 
+        // 1. Header
         canvas.drawRect(0f, 0f, w, headerHeight, headerBgPaint)
 
-        val dayNames = listOf("一", "二", "三", "四", "五", "六", "日")
+        val dayNames = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
         for (i in 0 until totalDays) {
             val left = timeColWidth + i * dayColWidth
             val centerX = left + dayColWidth / 2f
-            canvas.drawText("周" + dayNames[i], centerX, headerHeight / 2f + 4 * density, textPaint)
+            canvas.drawText(dayNames[i], centerX, headerHeight / 2f + 4 * density, textPaint)
             canvas.drawLine(left, 0f, left, height.toFloat(), linePaint)
         }
         canvas.drawLine(0f, headerHeight, w, headerHeight, linePaint)
         canvas.drawLine(timeColWidth, 0f, timeColWidth, height.toFloat(), linePaint)
 
+        // 2. Periods & Times
         for (p in 1..totalPeriods) {
             val top = headerHeight + (p - 1) * rowHeight
             val bottom = top + rowHeight
 
-            canvas.drawText("$p", timeColWidth / 2f, top + 18 * density, periodTextPaint)
+            canvas.drawText("$p", timeColWidth / 2f, top + 20 * density, periodTextPaint)
             val startTime = TimeSlot.getStartTime(p)
-            canvas.drawText(startTime, timeColWidth / 2f, top + 34 * density, timeSubTextPaint)
+            canvas.drawText(startTime, timeColWidth / 2f, top + 36 * density, timeSubTextPaint)
             canvas.drawLine(0f, bottom, w, bottom, linePaint)
         }
 
+        // 3. Course Cards
         for (c in courses) {
             val dayIndex = c.dayOfWeek - 1
             if (dayIndex !in 0 until totalDays) continue
@@ -133,10 +144,10 @@ class TimetableView @JvmOverloads constructor(
             val bottom = top + count * rowHeight
 
             val rect = RectF(
-                colLeft + 2 * density,
-                top + 2 * density,
-                colLeft + dayColWidth - 2 * density,
-                bottom - 2 * density
+                colLeft + 2.5f * density,
+                top + 2.5f * density,
+                colLeft + dayColWidth - 2.5f * density,
+                bottom - 2.5f * density
             )
             courseRects.add(Pair(rect, c))
 
@@ -145,43 +156,48 @@ class TimetableView @JvmOverloads constructor(
             courseCardBorderPaint.color = color.border
             courseTitlePaint.color = color.text
 
-            val radius = 8 * density
+            val radius = 10 * density
             canvas.drawRoundRect(rect, radius, radius, courseCardPaint)
             canvas.drawRoundRect(rect, radius, radius, courseCardBorderPaint)
 
             canvas.save()
             canvas.clipRect(rect)
 
-            var textY = rect.top + 14 * density
+            var textY = rect.top + 13 * density
             val paddingX = rect.left + 5 * density
             val maxTextW = rect.width() - 8 * density
 
+            // Course Name
             val nameWords = c.name
             var curLine = ""
+            var linesRendered = 0
             for (ch in nameWords) {
                 if (courseTitlePaint.measureText(curLine + ch) > maxTextW) {
                     canvas.drawText(curLine, paddingX, textY, courseTitlePaint)
                     textY += 13 * density
+                    linesRendered++
                     curLine = "$ch"
-                    if (textY > rect.bottom - 20 * density) break
+                    if (linesRendered >= 2) break
                 } else {
                     curLine += ch
                 }
             }
-            if (curLine.isNotEmpty() && textY <= rect.bottom - 10 * density) {
+            if (curLine.isNotEmpty() && linesRendered < 2 && textY <= rect.bottom - 16 * density) {
                 canvas.drawText(curLine, paddingX, textY, courseTitlePaint)
                 textY += 13 * density
             }
 
-            if (c.location.isNotEmpty() && textY <= rect.bottom - 4 * density) {
-                val locText = "@" + c.location.replace("号楼", "#")
-                canvas.drawText(locText, paddingX, textY, courseDtlPaint)
-                textY += 11 * density
+            // Location (Bold)
+            if (c.location.isNotEmpty() && textY <= rect.bottom - 12 * density) {
+                val locText = "@ " + c.location
+                canvas.drawText(locText, paddingX, textY, courseLocPaint)
+                textY += 12 * density
             }
 
-            if (c.teacher.isNotEmpty() && textY <= rect.bottom - 4 * density) {
-                val teaText = c.teacher.take(6)
-                canvas.drawText(teaText, paddingX, textY, courseDtlPaint)
+            // Time Slot
+            if (textY <= rect.bottom - 4 * density) {
+                val timeRange = "${c.getStartTime()}-${c.getEndTime()}"
+                canvas.drawText(timeRange, paddingX, textY, courseTimePaint)
             }
 
             canvas.restore()
