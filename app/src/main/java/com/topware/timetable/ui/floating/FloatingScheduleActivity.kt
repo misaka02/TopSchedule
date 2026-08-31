@@ -20,7 +20,6 @@ import com.topware.timetable.databinding.ActivityFloatingScheduleBinding
 import com.topware.timetable.databinding.ItemPageTodayBinding
 import com.topware.timetable.databinding.ItemPageWeekBinding
 import com.topware.timetable.databinding.ItemTodayCourseBinding
-import com.topware.timetable.ui.view.TimetableView
 import com.topware.timetable.util.TimeUtils
 import java.util.Calendar
 
@@ -28,7 +27,8 @@ class FloatingScheduleActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityFloatingScheduleBinding
     private lateinit var repository: ScheduleRepository
-    private var currentWeek: Int = 1
+    private var actualCurrentWeek: Int = 1
+    private var selectedWeek: Int = 1
     private var currentDay: Int = 1
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,7 +38,8 @@ class FloatingScheduleActivity : AppCompatActivity() {
 
         repository = ScheduleRepository.getInstance(this)
         val config = repository.getSemesterConfig()
-        currentWeek = TimeUtils.getCurrentWeek(config)
+        actualCurrentWeek = TimeUtils.getCurrentWeek(config)
+        selectedWeek = actualCurrentWeek
         currentDay = TimeUtils.getCurrentDayOfWeek()
 
         initViews()
@@ -46,60 +47,97 @@ class FloatingScheduleActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // 每次前台唤起时重新刷新数据与周次计算，确保展示最新课表
         val config = repository.getSemesterConfig()
-        currentWeek = TimeUtils.getCurrentWeek(config)
+        actualCurrentWeek = TimeUtils.getCurrentWeek(config)
         currentDay = TimeUtils.getCurrentDayOfWeek()
-        binding.tvFloatingSubtitle.text = "第 $currentWeek 周 · ${TimeUtils.getDayName(currentDay)}"
+        updateWeekTitle()
         binding.viewPagerFloating.adapter?.notifyDataSetChanged()
     }
 
     private fun initViews() {
-        // 点击空白处平滑退隐
+        // 点击外部空白处退隐
         binding.rootContainer.setOnClickListener {
             finishWithAnimation()
         }
 
         binding.cardFloating.setOnClickListener {
-            // 消费点击事件
+            // 消费点击事件，防止穿透
         }
 
         binding.btnCloseFloating.setOnClickListener {
             finishWithAnimation()
         }
 
-        // 返回键/侧滑手势退隐
+        // 监听返回键与手势返回
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 finishWithAnimation()
             }
         })
 
-        binding.tvFloatingSubtitle.text = "第 $currentWeek 周 · ${TimeUtils.getDayName(currentDay)}"
+        // 周次切换
+        binding.btnPrevWeek.setOnClickListener {
+            if (selectedWeek > 1) {
+                selectedWeek--
+                updateWeekTitle()
+                binding.viewPagerFloating.adapter?.notifyDataSetChanged()
+            }
+        }
 
-        // 设置 ViewPager2 左右滑动手势
+        binding.btnNextWeek.setOnClickListener {
+            val config = repository.getSemesterConfig()
+            if (selectedWeek < config.totalWeeks) {
+                selectedWeek++
+                updateWeekTitle()
+                binding.viewPagerFloating.adapter?.notifyDataSetChanged()
+            }
+        }
+
+        updateWeekTitle()
+
         val pagerAdapter = FloatingPagerAdapter()
         binding.viewPagerFloating.adapter = pagerAdapter
 
-        binding.toggleGroupMode.check(R.id.btnTabToday)
+        // 默认显示周课表（完整课表网格），也可根据用户设置
+        val defaultTab = repository.getFloatingDefaultTab() // 默认 1 (周课表)
+        val initialPage = if (defaultTab == 0) 1 else 0 // Page 0: Week, Page 1: Today
+        binding.viewPagerFloating.setCurrentItem(initialPage, false)
+
+        if (initialPage == 0) {
+            binding.toggleGroupMode.check(R.id.btnTabWeek)
+        } else {
+            binding.toggleGroupMode.check(R.id.btnTabToday)
+        }
+
         binding.toggleGroupMode.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (isChecked) {
-                val targetPage = if (checkedId == R.id.btnTabToday) 0 else 1
+                val targetPage = if (checkedId == R.id.btnTabWeek) 0 else 1
                 if (binding.viewPagerFloating.currentItem != targetPage) {
                     binding.viewPagerFloating.setCurrentItem(targetPage, true)
                 }
+                repository.setFloatingDefaultTab(if (checkedId == R.id.btnTabWeek) 1 else 0)
             }
         }
 
         binding.viewPagerFloating.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 if (position == 0) {
-                    binding.toggleGroupMode.check(R.id.btnTabToday)
-                } else {
                     binding.toggleGroupMode.check(R.id.btnTabWeek)
+                } else {
+                    binding.toggleGroupMode.check(R.id.btnTabToday)
                 }
+                repository.setFloatingDefaultTab(if (position == 0) 1 else 0)
             }
         })
+    }
+
+    private fun updateWeekTitle() {
+        val weekLabel = if (selectedWeek == actualCurrentWeek) {
+            "第 $selectedWeek 周 (本周)"
+        } else {
+            "第 $selectedWeek 周"
+        }
+        binding.tvCurrentWeek.text = weekLabel
     }
 
     private fun showCourseDetail(course: Course) {
@@ -112,10 +150,9 @@ class FloatingScheduleActivity : AppCompatActivity() {
         view.findViewById<TextView>(R.id.dialogTime).text = "${course.dayName} ${course.getFormattedPeriodRange()} (${course.getFormattedTimeRange()})"
         view.findViewById<TextView>(R.id.dialogLocation).text = course.location.ifBlank { "待定" }
         
-        val curTeacher = course.getTeacherForWeek(currentWeek)
+        val curTeacher = course.getTeacherForWeek(selectedWeek)
         view.findViewById<TextView>(R.id.dialogTeacher).text = "本周教师：$curTeacher"
 
-        // 展示各周次全周期授课安排
         val allTeachersTv = view.findViewById<TextView>(R.id.dialogAllTeachers)
         if (course.teacherAssignments.isNotEmpty()) {
             val sb = StringBuilder()
@@ -151,27 +188,37 @@ class FloatingScheduleActivity : AppCompatActivity() {
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
             val inflater = LayoutInflater.from(parent.context)
             return if (viewType == 0) {
-                val b = ItemPageTodayBinding.inflate(inflater, parent, false)
-                TodayPageViewHolder(b)
-            } else {
                 val b = ItemPageWeekBinding.inflate(inflater, parent, false)
                 WeekPageViewHolder(b)
+            } else {
+                val b = ItemPageTodayBinding.inflate(inflater, parent, false)
+                TodayPageViewHolder(b)
             }
         }
 
         override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-            if (holder is TodayPageViewHolder) {
+            if (holder is WeekPageViewHolder) {
                 holder.bind()
-            } else if (holder is WeekPageViewHolder) {
+            } else if (holder is TodayPageViewHolder) {
                 holder.bind()
             }
         }
 
         override fun getItemCount(): Int = 2
 
+        inner class WeekPageViewHolder(private val b: ItemPageWeekBinding) : RecyclerView.ViewHolder(b.root) {
+            fun bind() {
+                val weekCourses = repository.getCoursesForWeek(selectedWeek)
+                b.floatingTimetableView.setCourses(weekCourses, selectedWeek)
+                b.floatingTimetableView.setOnCourseClickListener {
+                    showCourseDetail(it)
+                }
+            }
+        }
+
         inner class TodayPageViewHolder(private val b: ItemPageTodayBinding) : RecyclerView.ViewHolder(b.root) {
             fun bind() {
-                val todayCourses = repository.getCoursesForDay(currentWeek, currentDay)
+                val todayCourses = repository.getCoursesForDay(selectedWeek, currentDay)
                 if (todayCourses.isEmpty()) {
                     b.rvTodayCourses.visibility = View.GONE
                     b.tvEmptyToday.visibility = View.VISIBLE
@@ -200,16 +247,6 @@ class FloatingScheduleActivity : AppCompatActivity() {
                 }
             }
         }
-
-        inner class WeekPageViewHolder(private val b: ItemPageWeekBinding) : RecyclerView.ViewHolder(b.root) {
-            fun bind() {
-                val weekCourses = repository.getCoursesForWeek(currentWeek)
-                b.floatingTimetableView.setCourses(weekCourses, currentWeek)
-                b.floatingTimetableView.setOnCourseClickListener {
-                    showCourseDetail(it)
-                }
-            }
-        }
     }
 
     inner class TodayCourseAdapter(
@@ -233,9 +270,7 @@ class FloatingScheduleActivity : AppCompatActivity() {
             holder.itemBinding.tvJieCiTag.text = item.getFormattedPeriodRange()
             holder.itemBinding.tvTimeRange.text = item.getFormattedTimeRange()
             holder.itemBinding.tvLocation.text = item.location.ifBlank { "未指定教室" }
-            
-            // 展示当前周次对应的老师
-            holder.itemBinding.tvTeacher.text = item.getTeacherForWeek(currentWeek)
+            holder.itemBinding.tvTeacher.text = item.getTeacherForWeek(selectedWeek)
             holder.itemBinding.tvWeeks.text = item.weeksStr.ifBlank { "全部周次" }
 
             when (status) {

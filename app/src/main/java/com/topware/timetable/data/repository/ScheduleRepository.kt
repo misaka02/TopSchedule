@@ -3,6 +3,7 @@ package com.topware.timetable.data.repository
 import android.content.Context
 import android.content.SharedPreferences
 import com.google.gson.Gson
+import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 import com.topware.timetable.data.model.Course
 import com.topware.timetable.data.model.SemesterConfig
@@ -22,6 +23,7 @@ class ScheduleRepository private constructor(context: Context) {
         private const val KEY_SAVED_USERNAME = "key_saved_username"
         private const val KEY_SAVED_PASSWORD = "key_saved_password"
         private const val KEY_REMEMBER_CREDENTIALS = "key_remember_credentials"
+        private const val KEY_FLOATING_DEFAULT_TAB = "key_floating_default_tab" // 0: Today, 1: Week
 
         @Volatile
         private var instance: ScheduleRepository? = null
@@ -33,6 +35,9 @@ class ScheduleRepository private constructor(context: Context) {
         }
     }
 
+    /**
+     * 获取课表数据（具备向下兼容反序列化保护，绝对不会丢弃用户导入的数据）
+     */
     fun getCourses(): List<Course> {
         val json = prefs.getString(KEY_COURSES, null)
         if (json.isNullOrBlank()) {
@@ -40,11 +45,68 @@ class ScheduleRepository private constructor(context: Context) {
             saveCourses(presets)
             return presets
         }
+
         return try {
             val type = object : TypeToken<List<Course>>() {}.type
-            gson.fromJson(json, type) ?: PresetCourses.SAMPLE_COURSES
+            val list: List<Course>? = gson.fromJson(json, type)
+            if (!list.isNullOrEmpty()) {
+                list
+            } else {
+                PresetCourses.SAMPLE_COURSES
+            }
         } catch (e: Exception) {
-            PresetCourses.SAMPLE_COURSES
+            // 容错解析：防止因字段变更导致用户已有课表丢失
+            try {
+                val jsonArray = JsonParser.parseString(json).asJsonArray
+                val fallbackList = mutableListOf<Course>()
+                for (elem in jsonArray) {
+                    val obj = elem.asJsonObject
+                    val name = obj.get("name")?.asString ?: "课程"
+                    val dayOfWeek = obj.get("dayOfWeek")?.asInt ?: 1
+                    val dayName = obj.get("dayName")?.asString ?: ""
+                    val jieci = obj.get("jieci")?.asString ?: ""
+                    val startPeriod = obj.get("startPeriod")?.asInt ?: 1
+                    val endPeriod = obj.get("endPeriod")?.asInt ?: startPeriod
+                    val location = obj.get("location")?.asString ?: ""
+                    val teacher = obj.get("teacher")?.asString ?: ""
+                    val weeksStr = obj.get("weeksStr")?.asString ?: ""
+                    val department = obj.get("department")?.asString ?: ""
+                    val phone = obj.get("phone")?.asString ?: ""
+                    val colorIndex = obj.get("colorIndex")?.asInt ?: Math.abs(name.hashCode())
+
+                    val weeks = mutableListOf<Int>()
+                    obj.get("weeks")?.asJsonArray?.forEach {
+                        weeks.add(it.asInt)
+                    }
+
+                    fallbackList.add(
+                        Course(
+                            name = name,
+                            teacher = teacher,
+                            dayOfWeek = dayOfWeek,
+                            dayName = dayName,
+                            jieci = jieci,
+                            startPeriod = startPeriod,
+                            endPeriod = endPeriod,
+                            periodCount = endPeriod - startPeriod + 1,
+                            weeksStr = weeksStr,
+                            weeks = weeks,
+                            location = location,
+                            department = department,
+                            phone = phone,
+                            colorIndex = colorIndex
+                        )
+                    )
+                }
+                if (fallbackList.isNotEmpty()) {
+                    saveCourses(fallbackList)
+                    fallbackList
+                } else {
+                    PresetCourses.SAMPLE_COURSES
+                }
+            } catch (e2: Exception) {
+                PresetCourses.SAMPLE_COURSES
+            }
         }
     }
 
@@ -88,7 +150,6 @@ class ScheduleRepository private constructor(context: Context) {
         prefs.edit().putBoolean(KEY_USE_DESKTOP_UA, enabled).apply()
     }
 
-    // --- 账号密码保存与自动填充 ---
     fun isRememberCredentials(): Boolean {
         return prefs.getBoolean(KEY_REMEMBER_CREDENTIALS, false)
     }
@@ -112,6 +173,17 @@ class ScheduleRepository private constructor(context: Context) {
             editor.remove(KEY_SAVED_PASSWORD)
         }
         editor.apply()
+    }
+
+    /**
+     * 悬浮窗默认打开的视图：0 为当日课表，1 为周课表（默认直接打开周课表总览）
+     */
+    fun getFloatingDefaultTab(): Int {
+        return prefs.getInt(KEY_FLOATING_DEFAULT_TAB, 1) // 默认打开 1 (周课表总览)
+    }
+
+    fun setFloatingDefaultTab(tabIndex: Int) {
+        prefs.edit().putInt(KEY_FLOATING_DEFAULT_TAB, tabIndex).apply()
     }
 
     fun getCoursesForWeek(week: Int): List<Course> {
