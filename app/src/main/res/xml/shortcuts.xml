@@ -7,9 +7,9 @@
         android:shortcutShortLabel="@string/shortcut_short_label"
         android:shortcutLongLabel="@string/shortcut_long_label">
         <intent
-            android:action="com.topware.timetable.ACTION_SHOW_FLOATING_SCHEDULE"
+            android:action="android.intent.action.VIEW"
             android:targetPackage="com.topware.timetable"
             android:targetClass="com.topware.timetable.ui.floating.FloatingScheduleActivity" />
-        <categories android:name="android.intent.category.DEFAULT" />
+        <categories android:name="android.shortcut.conversation" />
     </shortcut>
 </shortcuts>

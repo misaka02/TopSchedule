@@ -1,5 +1,6 @@
-# Keep original class and package names without obfuscation
+# Keep original class and package names without obfuscation or aggressive inlining
 -dontobfuscate
+-dontoptimize
 
 # Keep all project classes, methods, and constructors
 -keep class com.topware.timetable.** { *; }
