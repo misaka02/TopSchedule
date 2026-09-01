@@ -1,6 +1,7 @@
 package com.topware.timetable.ui.main
 
 import android.app.AlertDialog
+import android.app.DatePickerDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -14,12 +15,15 @@ import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import com.topware.timetable.R
 import com.topware.timetable.data.model.Course
+import com.topware.timetable.data.model.SemesterConfig
+import com.topware.timetable.data.model.TimeSlot
 import com.topware.timetable.data.parser.TopsoftHtmlParser
 import com.topware.timetable.data.repository.ScheduleRepository
 import com.topware.timetable.databinding.ActivityMainBinding
 import com.topware.timetable.ui.floating.FloatingScheduleActivity
 import com.topware.timetable.ui.webview.WebScheduleActivity
 import com.topware.timetable.util.TimeUtils
+import java.util.Calendar
 
 class MainActivity : AppCompatActivity() {
 
@@ -28,6 +32,7 @@ class MainActivity : AppCompatActivity() {
 
     private var selectedWeek: Int = 1
     private var currentActualWeek: Int = 1
+    private lateinit var semesterConfig: SemesterConfig
 
     private val selectHtmlLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { importFromUri(it) }
@@ -48,6 +53,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        initTimeData()
         loadScheduleForWeek(selectedWeek)
     }
 
@@ -94,8 +100,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initTimeData() {
-        val config = repository.getSemesterConfig()
-        currentActualWeek = TimeUtils.getCurrentWeek(config)
+        semesterConfig = repository.getSemesterConfig()
+        currentActualWeek = TimeUtils.getCurrentWeek(semesterConfig)
         selectedWeek = currentActualWeek
         updateWeekTitle(selectedWeek)
     }
@@ -114,8 +120,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnMainNextWeek.setOnClickListener {
-            val config = repository.getSemesterConfig()
-            if (selectedWeek < config.totalWeeks) {
+            if (selectedWeek < semesterConfig.totalWeeks) {
                 selectedWeek++
                 updateWeekSelection(selectedWeek)
             }
@@ -141,19 +146,51 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showWeekSelectDialog() {
-        val config = repository.getSemesterConfig()
-        val items = (1..config.totalWeeks).map { w ->
-            if (w == currentActualWeek) "第 $w 周 (本周)" else "第 $w 周"
+        val items = (1..semesterConfig.totalWeeks).map { w ->
+            val range = TimeUtils.getWeekDateRange(semesterConfig, w)
+            if (w == currentActualWeek) {
+                "第 $w 周 (本周)  [$range]"
+            } else {
+                "第 $w 周  [$range]"
+            }
         }.toTypedArray()
 
         AlertDialog.Builder(this)
-            .setTitle("选择周次")
+            .setTitle("选择周次与日期")
             .setSingleChoiceItems(items, selectedWeek - 1) { dialog, which ->
                 selectedWeek = which + 1
                 updateWeekSelection(selectedWeek)
                 dialog.dismiss()
             }
+            .setNeutralButton("校准开学日期") { _, _ ->
+                showSetStartDateDialog()
+            }
             .show()
+    }
+
+    private fun showSetStartDateDialog() {
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = semesterConfig.startDateMillis
+        }
+        DatePickerDialog(
+            this,
+            { _, year, month, dayOfMonth ->
+                val newCal = Calendar.getInstance().apply {
+                    set(year, month, dayOfMonth, 0, 0, 0)
+                    set(Calendar.MILLISECOND, 0)
+                    // 确保对齐到该周周一
+                    set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+                }
+                val newConfig = semesterConfig.copy(startDateMillis = newCal.timeInMillis)
+                repository.saveSemesterConfig(newConfig)
+                initTimeData()
+                loadScheduleForWeek(selectedWeek)
+                Toast.makeText(this, "开学周一已设置为：${TimeUtils.getFormattedDate(newCal.timeInMillis)}", Toast.LENGTH_SHORT).show()
+            },
+            cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH),
+            cal.get(Calendar.DAY_OF_MONTH)
+        ).show()
     }
 
     private fun updateWeekSelection(week: Int) {
@@ -162,17 +199,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateWeekTitle(week: Int) {
+        val dateRange = TimeUtils.getWeekDateRange(semesterConfig, week)
         val weekText = if (week == currentActualWeek) {
-            "第 $week 周 (本周) ▼"
+            "第 $week 周 (本周) · $dateRange ▼"
         } else {
-            "第 $week 周 ▼"
+            "第 $week 周 · $dateRange ▼"
         }
         binding.tvMainWeekTitle.text = weekText
     }
 
     private fun loadScheduleForWeek(week: Int) {
         val weekCourses = repository.getCoursesForWeek(week)
-        binding.timetableView.setCourses(weekCourses, week)
+        binding.timetableView.setCourses(weekCourses, week, semesterConfig)
     }
 
     private fun showCourseDetailDialog(course: Course) {
@@ -181,8 +219,17 @@ class MainActivity : AppCompatActivity() {
         val currentWeek = selectedWeek
         val teacherForThisWeek = course.getTeacherForWeek(currentWeek)
 
+        val specificDate = TimeUtils.getSpecificDateString(semesterConfig, currentWeek, course.dayOfWeek)
+        val startTime = TimeSlot.getStartTime(course.startPeriod)
+        val endTime = TimeSlot.getEndTime(course.endPeriod)
+
         val sb = StringBuilder()
-        sb.append("时间：${course.dayName} 第 ${course.jieci} 节\n")
+        if (specificDate.isNotBlank()) {
+            sb.append("日期：$specificDate ${course.dayName}\n")
+        } else {
+            sb.append("时间：${course.dayName}\n")
+        }
+        sb.append("节次：第 ${course.jieci} 节 ($startTime - $endTime)\n")
         sb.append("教室：${course.location.ifBlank { "未指定" }}\n")
         sb.append("教师：${teacherForThisWeek.ifBlank { course.teacher.ifBlank { "待定" } }}\n")
         sb.append("周次：${course.weeksStr.ifBlank { "${course.weeks.firstOrNull() ?: 1}-${course.weeks.lastOrNull() ?: 16}周" }}\n")
@@ -196,8 +243,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
         menu?.add(0, 1, 0, "添加侧边栏/桌面快捷方式")
-        menu?.add(0, 2, 1, "导入本地 HTML 课表")
-        menu?.add(0, 3, 2, "网络同步课表")
+        menu?.add(0, 2, 1, "校准开学日期")
+        menu?.add(0, 3, 2, "导入本地 HTML 课表")
+        menu?.add(0, 4, 3, "网络同步课表")
         return true
     }
 
@@ -208,10 +256,14 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             2 -> {
-                selectHtmlLauncher.launch("*/*")
+                showSetStartDateDialog()
                 true
             }
             3 -> {
+                selectHtmlLauncher.launch("*/*")
+                true
+            }
+            4 -> {
                 startActivity(Intent(this, WebScheduleActivity::class.java))
                 true
             }

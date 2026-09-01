@@ -15,6 +15,7 @@ import com.google.android.material.button.MaterialButton
 import com.topware.timetable.R
 import com.topware.timetable.data.model.Course
 import com.topware.timetable.data.model.CourseStatus
+import com.topware.timetable.data.model.SemesterConfig
 import com.topware.timetable.data.model.TimeSlot
 import com.topware.timetable.data.repository.ScheduleRepository
 import com.topware.timetable.databinding.ActivityFloatingScheduleBinding
@@ -31,6 +32,7 @@ class FloatingScheduleActivity : AppCompatActivity() {
     private var actualCurrentWeek: Int = 1
     private var selectedWeek: Int = 1
     private var currentDay: Int = 1
+    private lateinit var semesterConfig: SemesterConfig
     private lateinit var pagerAdapter: FloatingPagerAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -39,8 +41,8 @@ class FloatingScheduleActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         repository = ScheduleRepository.getInstance(this)
-        val config = repository.getSemesterConfig()
-        actualCurrentWeek = TimeUtils.getCurrentWeek(config)
+        semesterConfig = repository.getSemesterConfig()
+        actualCurrentWeek = TimeUtils.getCurrentWeek(semesterConfig)
         selectedWeek = actualCurrentWeek
         currentDay = TimeUtils.getCurrentDayOfWeek()
 
@@ -50,8 +52,8 @@ class FloatingScheduleActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        val config = repository.getSemesterConfig()
-        actualCurrentWeek = TimeUtils.getCurrentWeek(config)
+        semesterConfig = repository.getSemesterConfig()
+        actualCurrentWeek = TimeUtils.getCurrentWeek(semesterConfig)
         currentDay = TimeUtils.getCurrentDayOfWeek()
         updateWeekTitle()
         loadData()
@@ -84,8 +86,7 @@ class FloatingScheduleActivity : AppCompatActivity() {
         }
 
         binding.btnNextWeek.setOnClickListener {
-            val config = repository.getSemesterConfig()
-            if (selectedWeek < config.totalWeeks) {
+            if (selectedWeek < semesterConfig.totalWeeks) {
                 selectedWeek++
                 updateWeekTitle()
                 loadData()
@@ -133,10 +134,11 @@ class FloatingScheduleActivity : AppCompatActivity() {
     }
 
     private fun updateWeekTitle() {
+        val dateRange = TimeUtils.getWeekDateRange(semesterConfig, selectedWeek)
         val weekStr = if (selectedWeek == actualCurrentWeek) {
-            "第 $selectedWeek 周 (本周)"
+            "第 $selectedWeek 周 (本周) · $dateRange"
         } else {
-            "第 $selectedWeek 周"
+            "第 $selectedWeek 周 · $dateRange"
         }
         binding.tvCurrentWeek.text = weekStr
     }
@@ -147,7 +149,6 @@ class FloatingScheduleActivity : AppCompatActivity() {
 
     private fun finishWithAnimation() {
         finish()
-        overridePendingTransition(0, android.R.anim.fade_out)
     }
 
     private fun showCourseDetail(course: Course) {
@@ -167,9 +168,15 @@ class FloatingScheduleActivity : AppCompatActivity() {
 
         tvName?.text = course.name
 
+        val specificDate = TimeUtils.getSpecificDateString(semesterConfig, selectedWeek, course.dayOfWeek)
         val startTime = TimeSlot.getStartTime(course.startPeriod)
         val endTime = TimeSlot.getEndTime(course.endPeriod)
-        tvTime?.text = "${course.dayName} 第 ${course.jieci} 节 ($startTime - $endTime)"
+        val timeDisplay = if (specificDate.isNotBlank()) {
+            "$specificDate ${course.dayName} 第 ${course.jieci} 节 ($startTime - $endTime)"
+        } else {
+            "${course.dayName} 第 ${course.jieci} 节 ($startTime - $endTime)"
+        }
+        tvTime?.text = timeDisplay
 
         tvLoc?.text = course.location.ifBlank { "未指定教室" }
 
@@ -272,7 +279,7 @@ class FloatingScheduleActivity : AppCompatActivity() {
 
             fun bind() {
                 val weekCourses = repository.getCoursesForWeek(selectedWeek)
-                pageBinding.floatingTimetableView.setCourses(weekCourses, selectedWeek)
+                pageBinding.floatingTimetableView.setCourses(weekCourses, selectedWeek, semesterConfig)
                 pageBinding.floatingTimetableView.setOnCourseClickListener { course ->
                     showCourseDetail(course)
                 }

@@ -10,8 +10,10 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
 import com.topware.timetable.data.model.Course
+import com.topware.timetable.data.model.SemesterConfig
 import com.topware.timetable.data.model.TimeSlot
 import com.topware.timetable.util.CourseColorHelper
+import com.topware.timetable.util.TimeUtils
 
 class TimetableView @JvmOverloads constructor(
     context: Context,
@@ -21,11 +23,12 @@ class TimetableView @JvmOverloads constructor(
 
     private var courses: List<Course> = emptyList()
     private var displayedWeek: Int = 1
+    private var semesterConfig: SemesterConfig = SemesterConfig()
     private var onCourseClickListener: ((Course) -> Unit)? = null
 
     private val density = resources.displayMetrics.density
     private val timeColWidth = 46 * density
-    private val headerHeight = 36 * density
+    private val headerHeight = 44 * density
     private val rowHeight = 66 * density
     private val totalPeriods = 13
     private val totalDays = 7
@@ -35,9 +38,24 @@ class TimetableView @JvmOverloads constructor(
     }
 
     private val headerBgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val todayHeaderBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+    }
 
-    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val monthTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textSize = 12 * density
+        isFakeBoldText = true
+        textAlign = Paint.Align.CENTER
+    }
+
+    private val dayNameTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = 12 * density
+        isFakeBoldText = true
+        textAlign = Paint.Align.CENTER
+    }
+
+    private val dateTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = 10 * density
         textAlign = Paint.Align.CENTER
     }
 
@@ -90,9 +108,10 @@ class TimetableView @JvmOverloads constructor(
 
     private val courseRects = mutableListOf<Pair<RectF, Course>>()
 
-    fun setCourses(newCourses: List<Course>, currentWeek: Int = 1) {
+    fun setCourses(newCourses: List<Course>, currentWeek: Int = 1, config: SemesterConfig = SemesterConfig()) {
         this.courses = newCourses
         this.displayedWeek = currentWeek
+        this.semesterConfig = config
         invalidate()
     }
 
@@ -114,7 +133,12 @@ class TimetableView @JvmOverloads constructor(
 
         linePaint.color = if (isDark) Color.parseColor("#2A2A2A") else Color.parseColor("#EEF0F2")
         headerBgPaint.color = if (isDark) Color.parseColor("#1E1E1E") else Color.parseColor("#F8F9FA")
-        textPaint.color = if (isDark) Color.parseColor("#E0E0E0") else Color.parseColor("#374151")
+        todayHeaderBgPaint.color = if (isDark) Color.parseColor("#1E293B") else Color.parseColor("#E0E7FF")
+
+        monthTextPaint.color = if (isDark) Color.parseColor("#93C5FD") else Color.parseColor("#2563EB")
+        dayNameTextPaint.color = if (isDark) Color.parseColor("#E0E0E0") else Color.parseColor("#374151")
+        dateTextPaint.color = if (isDark) Color.parseColor("#9CA3AF") else Color.parseColor("#6B7280")
+
         periodTextPaint.color = if (isDark) Color.parseColor("#E5E7EB") else Color.parseColor("#1F2937")
         timeStartTextPaint.color = if (isDark) Color.parseColor("#D1D5DB") else Color.parseColor("#4B5563")
         timeEndTextPaint.color = if (isDark) Color.parseColor("#9CA3AF") else Color.parseColor("#6B7280")
@@ -122,31 +146,62 @@ class TimetableView @JvmOverloads constructor(
         val w = width.toFloat()
         val dayColWidth = (w - timeColWidth) / totalDays
 
-        // 1. 顶部星期栏
+        val currentActualWeek = TimeUtils.getCurrentWeek(semesterConfig)
+        val currentActualDay = TimeUtils.getCurrentDayOfWeek()
+        val isCurrentWeek = (displayedWeek == currentActualWeek)
+
+        val weekDates = TimeUtils.getWeekDates(semesterConfig, displayedWeek)
+        val monthStr = TimeUtils.getMonthNameForWeek(semesterConfig, displayedWeek)
+
+        // 1. 顶部表头背景与月份
         canvas.drawRect(0f, 0f, w, headerHeight, headerBgPaint)
+        canvas.drawText(monthStr, timeColWidth / 2f, headerHeight / 2f + 4 * density, monthTextPaint)
 
         val dayNames = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
         for (i in 0 until totalDays) {
             val left = timeColWidth + i * dayColWidth
             val centerX = left + dayColWidth / 2f
-            canvas.drawText(dayNames[i], centerX, headerHeight / 2f + 4 * density, textPaint)
+            val isToday = isCurrentWeek && (i + 1 == currentActualDay)
+
+            // 如果是今天，绘制高亮背景胶囊
+            if (isToday) {
+                val pad = 3 * density
+                val todayRect = RectF(left + pad, 3 * density, left + dayColWidth - pad, headerHeight - 3 * density)
+                canvas.drawRoundRect(todayRect, 8 * density, 8 * density, todayHeaderBgPaint)
+            }
+
+            val dayTitle = dayNames[i]
+            val dateStr = if (i < weekDates.size) {
+                val (m, d) = weekDates[i]
+                "${m}/${String.format("%02d", d)}"
+            } else ""
+
+            if (isToday) {
+                dayNameTextPaint.color = if (isDark) Color.parseColor("#60A5FA") else Color.parseColor("#1D4ED8")
+                dateTextPaint.color = if (isDark) Color.parseColor("#93C5FD") else Color.parseColor("#2563EB")
+            } else {
+                dayNameTextPaint.color = if (isDark) Color.parseColor("#E0E0E0") else Color.parseColor("#374151")
+                dateTextPaint.color = if (isDark) Color.parseColor("#9CA3AF") else Color.parseColor("#6B7280")
+            }
+
+            // 绘制星期与公历具体日期 (如 周一 / 8/31)
+            canvas.drawText(dayTitle, centerX, 17 * density, dayNameTextPaint)
+            canvas.drawText(dateStr, centerX, 33 * density, dateTextPaint)
+
             canvas.drawLine(left, 0f, left, height.toFloat(), linePaint)
         }
         canvas.drawLine(0f, headerHeight, w, headerHeight, linePaint)
         canvas.drawLine(timeColWidth, 0f, timeColWidth, height.toFloat(), linePaint)
 
-        // 2. 节次与完整起止时间 (开始时间 + 结束时间清晰呈现)
+        // 2. 节次与完整起止时间
         for (p in 1..totalPeriods) {
             val top = headerHeight + (p - 1) * rowHeight
             val bottom = top + rowHeight
             val centerX = timeColWidth / 2f
 
-            // 节次序号 (如 1)
             canvas.drawText("$p", centerX, top + 18 * density, periodTextPaint)
-            // 开始时间 (如 08:00)
             val startTime = TimeSlot.getStartTime(p)
             canvas.drawText(startTime, centerX, top + 34 * density, timeStartTextPaint)
-            // 结束时间 (如 08:45)
             val endTime = TimeSlot.getEndTime(p)
             canvas.drawText(endTime, centerX, top + 48 * density, timeEndTextPaint)
 
@@ -225,7 +280,7 @@ class TimetableView @JvmOverloads constructor(
                 textY += 12 * density
             }
 
-            // 起止时间跨度 (多节大课若高度充足时直接在卡片底部呈现，如 08:00-09:35)
+            // 起止时间跨度
             if (count >= 2 && textY <= rect.bottom - 4 * density) {
                 val timeSpan = "${TimeSlot.getStartTime(c.startPeriod)}-${TimeSlot.getEndTime(c.endPeriod)}"
                 canvas.drawText(timeSpan, paddingX, textY, courseTimeSpanPaint)
